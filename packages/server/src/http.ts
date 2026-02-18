@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Kysely } from "kysely";
-import type { DB } from "./db/schema.js";
+import type { DB } from "./db/schema";
 
 export function createApp(db: Kysely<DB>) {
 	const app = new Hono();

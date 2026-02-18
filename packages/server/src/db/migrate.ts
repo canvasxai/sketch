@@ -4,8 +4,8 @@
  */
 import { Migrator } from "kysely";
 import type { Kysely } from "kysely";
-import * as m001 from "./migrations/001-initial.js";
-import type { DB } from "./schema.js";
+import * as m001 from "./migrations/001-initial";
+import type { DB } from "./schema";
 
 export async function runMigrations(db: Kysely<DB>): Promise<void> {
 	const migrator = new Migrator({

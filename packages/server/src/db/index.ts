@@ -2,8 +2,8 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
 import { Kysely, SqliteDialect } from "kysely";
-import type { Config } from "../config.js";
-import type { DB } from "./schema.js";
+import type { Config } from "../config";
+import type { DB } from "./schema";
 
 export function createDatabase(config: Config): Kysely<DB> {
 	mkdirSync(dirname(config.SQLITE_PATH), { recursive: true });

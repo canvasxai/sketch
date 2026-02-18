@@ -1,5 +1,5 @@
 import pino from "pino";
-import type { Config } from "./config.js";
+import type { Config } from "./config";
 
 export function createLogger(config: Config) {
 	return pino({

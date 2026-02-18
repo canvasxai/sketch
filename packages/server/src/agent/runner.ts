@@ -4,9 +4,9 @@ import { resolve } from "node:path";
  * isolated workspace with file access restrictions via canUseTool.
  */
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { Logger } from "../logger.js";
-import { buildSystemContext } from "./prompt.js";
-import { getSessionId, saveSessionId } from "./sessions.js";
+import type { Logger } from "../logger";
+import { buildSystemContext } from "./prompt";
+import { getSessionId, saveSessionId } from "./sessions";
 
 export interface AgentResult {
 	text: string | null;

@@ -29,7 +29,7 @@ Sketch runs as a single Node.js process. When a user messages the bot:
 Requires Node.js 22+ and pnpm.
 
 ```bash
-git clone https://github.com/AskSketch/sketch.git
+git clone https://github.com/canvasxai/sketch.git
 cd sketch
 pnpm install
 cp .env.example .env

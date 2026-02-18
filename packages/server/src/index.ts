@@ -1,14 +1,14 @@
 import { serve } from "@hono/node-server";
-import { runAgent } from "./agent/runner.js";
-import { ensureWorkspace } from "./agent/workspace.js";
-import { loadConfig, validateConfig } from "./config.js";
-import { createDatabase } from "./db/index.js";
-import { runMigrations } from "./db/migrate.js";
-import { createUserRepository } from "./db/repositories/users.js";
-import { createApp } from "./http.js";
-import { createLogger } from "./logger.js";
-import { QueueManager } from "./queue.js";
-import { SlackBot } from "./slack/bot.js";
+import { runAgent } from "./agent/runner";
+import { ensureWorkspace } from "./agent/workspace";
+import { loadConfig, validateConfig } from "./config";
+import { createDatabase } from "./db/index";
+import { runMigrations } from "./db/migrate";
+import { createUserRepository } from "./db/repositories/users";
+import { createApp } from "./http";
+import { createLogger } from "./logger";
+import { QueueManager } from "./queue";
+import { SlackBot } from "./slack/bot";
 
 // 1. Config
 const config = loadConfig();
