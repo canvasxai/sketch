@@ -7,5 +7,8 @@
 	"scripts": {
 		"build": "tsdown src/index.ts --format esm --out-dir dist --dts",
 		"typecheck": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"tsdown": "^0.14.0"
 	}
 }
