@@ -1,0 +1,11 @@
+{
+	"name": "@sketch/shared",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"main": "src/index.ts",
+	"scripts": {
+		"build": "tsdown src/index.ts --format esm --out-dir dist --dts",
+		"typecheck": "tsc --noEmit"
+	}
+}

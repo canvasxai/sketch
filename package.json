@@ -1,0 +1,18 @@
+{
+	"private": true,
+	"scripts": {
+		"dev": "tsx --watch packages/server/src/index.ts",
+		"build": "pnpm -r build",
+		"lint": "biome check .",
+		"format": "biome format . --write",
+		"typecheck": "pnpm -r typecheck"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.0",
+		"tsx": "^4.19.0",
+		"typescript": "^5.7.0"
+	},
+	"pnpm": {
+		"onlyBuiltDependencies": ["better-sqlite3", "@biomejs/biome", "esbuild"]
+	}
+}
