@@ -6,7 +6,7 @@
 import { z } from "zod";
 import "dotenv/config";
 
-const configSchema = z.object({
+export const configSchema = z.object({
 	// Database
 	DB_TYPE: z.enum(["sqlite", "postgres"]).default("sqlite"),
 	SQLITE_PATH: z.string().default("./data/sketch.db"),
