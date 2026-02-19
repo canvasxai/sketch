@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildSystemContext } from "./prompt";
 
 describe("buildSystemContext", () => {
-	describe("slack platform", () => {
+	describe("slack platform (DM)", () => {
 		const result = buildSystemContext({
 			platform: "slack",
 			userName: "Alice",
@@ -30,8 +30,15 @@ describe("buildSystemContext", () => {
 			expect(result).toContain("MUST only read, write, and execute files within this directory");
 		});
 
-		it("includes user name", () => {
+		it("includes user name under User heading", () => {
+			expect(result).toContain("## User");
 			expect(result).toContain("Alice");
+		});
+
+		it("does not include channel context sections", () => {
+			expect(result).not.toContain("Slack Channel #");
+			expect(result).not.toContain("Sent by");
+			expect(result).not.toContain("Recent Channel Messages");
 		});
 	});
 
@@ -58,6 +65,70 @@ describe("buildSystemContext", () => {
 
 		it("includes user name", () => {
 			expect(result).toContain("Bob");
+		});
+	});
+
+	describe("channel context", () => {
+		const result = buildSystemContext({
+			platform: "slack",
+			userName: "Carol",
+			workspaceDir: "/data/workspaces/channel-C001",
+			channelContext: {
+				channelName: "general",
+				recentMessages: [
+					{ userName: "Alice", text: "has anyone tried the new API?" },
+					{ userName: "Bob", text: "yeah it works on staging" },
+				],
+			},
+		});
+
+		it("includes channel name", () => {
+			expect(result).toContain("Slack Channel #general");
+		});
+
+		it("includes shared workspace note", () => {
+			expect(result).toContain("Multiple users share this workspace");
+		});
+
+		it("uses Sent by instead of User", () => {
+			expect(result).toContain("## Sent by");
+			expect(result).toContain("Carol");
+			expect(result).not.toContain("## User");
+		});
+
+		it("includes recent messages with usernames", () => {
+			expect(result).toContain("## Recent Channel Messages");
+			expect(result).toContain("[Alice]: has anyone tried the new API?");
+			expect(result).toContain("[Bob]: yeah it works on staging");
+		});
+
+		it("still includes Slack formatting rules", () => {
+			expect(result).toContain("mrkdwn");
+		});
+
+		it("still includes workspace isolation", () => {
+			expect(result).toContain("Workspace Isolation");
+			expect(result).toContain("/data/workspaces/channel-C001");
+		});
+	});
+
+	describe("channel context with empty recent messages", () => {
+		const result = buildSystemContext({
+			platform: "slack",
+			userName: "Dave",
+			workspaceDir: "/data/workspaces/channel-C002",
+			channelContext: {
+				channelName: "random",
+				recentMessages: [],
+			},
+		});
+
+		it("includes channel name", () => {
+			expect(result).toContain("Slack Channel #random");
+		});
+
+		it("omits recent messages section when array is empty", () => {
+			expect(result).not.toContain("## Recent Channel Messages");
 		});
 	});
 });

@@ -5,6 +5,7 @@
 import { Migrator } from "kysely";
 import type { Kysely } from "kysely";
 import * as m001 from "./migrations/001-initial";
+import * as m002 from "./migrations/002-channels";
 import type { DB } from "./schema";
 
 export async function runMigrations(db: Kysely<DB>): Promise<void> {
@@ -14,6 +15,7 @@ export async function runMigrations(db: Kysely<DB>): Promise<void> {
 			async getMigrations() {
 				return {
 					"001-initial": m001,
+					"002-channels": m002,
 				};
 			},
 		},

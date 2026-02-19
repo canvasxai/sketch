@@ -1,7 +1,7 @@
 /**
  * Slack adapter wrapping @slack/bolt in Socket Mode.
- * Listens for DMs, filters bot messages, exposes send/update methods.
- * Bot message filtering uses bot_id check instead of ignoreSelf (bolt-js#580).
+ * Handles DMs via message event and channel @mentions via app_mention event.
+ * Bot self-ID resolved at startup via auth.test for mention stripping.
  */
 import { App } from "@slack/bolt";
 import type { Logger } from "../logger.js";
@@ -11,6 +11,7 @@ export interface SlackMessage {
 	userId: string;
 	channelId: string;
 	ts: string;
+	type: "dm" | "channel_mention";
 }
 
 export type SlackMessageHandler = (message: SlackMessage) => Promise<void>;
@@ -25,6 +26,8 @@ export class SlackBot {
 	private app: App;
 	private logger: Logger;
 	private handler: SlackMessageHandler | null = null;
+	private mentionHandler: SlackMessageHandler | null = null;
+	private botUserId: string | null = null;
 
 	constructor(config: SlackBotConfig) {
 		this.logger = config.logger;
@@ -35,11 +38,23 @@ export class SlackBot {
 		});
 	}
 
+	static stripBotMention(text: string, botUserId: string): string {
+		return text.replace(new RegExp(`<@${botUserId}>`, "g"), "").replace(/\s+/g, " ").trim();
+	}
+
 	onMessage(handler: SlackMessageHandler): void {
 		this.handler = handler;
 	}
 
+	onChannelMention(handler: SlackMessageHandler): void {
+		this.mentionHandler = handler;
+	}
+
 	async start(): Promise<void> {
+		const auth = await this.app.client.auth.test();
+		this.botUserId = auth.user_id ?? null;
+		this.logger.info({ botUserId: this.botUserId }, "Resolved bot user ID");
+
 		this.app.message(async ({ message }) => {
 			if ("bot_id" in message && message.bot_id) return;
 			if (!("channel_type" in message) || message.channel_type !== "im") return;
@@ -48,12 +63,29 @@ export class SlackBot {
 
 			if (this.handler) {
 				await this.handler({
+					type: "dm",
 					text: message.text,
 					userId: message.user,
 					channelId: message.channel,
 					ts: message.ts,
 				});
 			}
+		});
+
+		this.app.event("app_mention", async ({ event }) => {
+			if (!this.mentionHandler) return;
+			if (!event.text || !event.user) return;
+
+			const cleanText = SlackBot.stripBotMention(event.text, this.botUserId!);
+			if (!cleanText) return;
+
+			await this.mentionHandler({
+				type: "channel_mention",
+				text: cleanText,
+				userId: event.user,
+				channelId: event.channel,
+				ts: event.ts,
+			});
 		});
 
 		await this.app.start();
@@ -63,6 +95,15 @@ export class SlackBot {
 	async postMessage(channelId: string, text: string): Promise<string> {
 		const result = await this.app.client.chat.postMessage({
 			channel: channelId,
+			text,
+		});
+		return result.ts ?? "";
+	}
+
+	async postThreadReply(channelId: string, threadTs: string, text: string): Promise<string> {
+		const result = await this.app.client.chat.postMessage({
+			channel: channelId,
+			thread_ts: threadTs,
 			text,
 		});
 		return result.ts ?? "";
@@ -82,6 +123,29 @@ export class SlackBot {
 			name: result.user?.name ?? "unknown",
 			realName: result.user?.real_name ?? result.user?.name ?? "unknown",
 		};
+	}
+
+	async getChannelInfo(channelId: string): Promise<{ name: string; type: string }> {
+		const result = await this.app.client.conversations.info({ channel: channelId });
+		const channel = result.channel;
+		let type = "public_channel";
+		if (channel?.is_group) type = "group";
+		else if (channel?.is_private) type = "private_channel";
+		return {
+			name: channel?.name ?? "unknown",
+			type,
+		};
+	}
+
+	async getChannelHistory(channelId: string, limit = 20): Promise<Array<{ userId: string; text: string; ts: string }>> {
+		const result = await this.app.client.conversations.history({ channel: channelId, limit });
+		return (result.messages ?? [])
+			.filter((m) => m.text && m.user && !m.bot_id)
+			.map((m) => ({
+				userId: m.user!,
+				text: m.text!,
+				ts: m.ts!,
+			}));
 	}
 
 	async stop(): Promise<void> {

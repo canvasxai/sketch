@@ -1,9 +1,10 @@
 import { serve } from "@hono/node-server";
 import { runAgent } from "./agent/runner";
-import { ensureWorkspace } from "./agent/workspace";
+import { ensureChannelWorkspace, ensureWorkspace } from "./agent/workspace";
 import { loadConfig, validateConfig } from "./config";
 import { createDatabase } from "./db/index";
 import { runMigrations } from "./db/migrate";
+import { createChannelRepository } from "./db/repositories/channels";
 import { createUserRepository } from "./db/repositories/users";
 import { createApp } from "./http";
 import { createLogger } from "./logger";
@@ -24,6 +25,7 @@ logger.info("Database ready");
 
 // 4. Repositories
 const users = createUserRepository(db);
+const channels = createChannelRepository(db);
 
 // 5. HTTP server
 const app = createApp(db);
@@ -80,7 +82,78 @@ slack.onMessage(async (message) => {
 	});
 });
 
-// 9. Start Slack bot
+// 9. Channel mention handler
+slack.onChannelMention(async (message) => {
+	const queue = queueManager.getQueue(message.channelId);
+
+	queue.enqueue(async () => {
+		logger.info(
+			{ slackUserId: message.userId, channelId: message.channelId },
+			"Processing channel mention",
+		);
+
+		// Resolve or create user
+		let user = await users.findBySlackId(message.userId);
+		if (!user) {
+			const userInfo = await slack.getUserInfo(message.userId);
+			user = await users.create({
+				name: userInfo.realName,
+				slackUserId: message.userId,
+			});
+			logger.info({ userId: user.id, name: user.name }, "New user created");
+		}
+
+		// Resolve or create channel
+		let channel = await channels.findBySlackChannelId(message.channelId);
+		if (!channel) {
+			const channelInfo = await slack.getChannelInfo(message.channelId);
+			channel = await channels.create({
+				slackChannelId: message.channelId,
+				name: channelInfo.name,
+				type: channelInfo.type,
+			});
+			logger.info({ channelId: channel.id, name: channel.name }, "New channel created");
+		}
+
+		// Ensure channel workspace
+		const workspaceDir = await ensureChannelWorkspace(config, message.channelId);
+
+		// Fetch recent channel messages for context
+		const history = await slack.getChannelHistory(message.channelId, 20);
+		const recentMessages: Array<{ userName: string; text: string }> = [];
+		for (const msg of history.reverse()) {
+			try {
+				const info = await slack.getUserInfo(msg.userId);
+				recentMessages.push({ userName: info.realName, text: msg.text });
+			} catch {
+				recentMessages.push({ userName: "Unknown", text: msg.text });
+			}
+		}
+
+		// Post thinking indicator in thread
+		const thinkingTs = await slack.postThreadReply(message.channelId, message.ts, "_Thinking..._");
+
+		try {
+			const result = await runAgent({
+				userMessage: message.text,
+				workspaceDir,
+				userName: user.name,
+				logger,
+				channelContext: {
+					channelName: channel.name,
+					recentMessages,
+				},
+			});
+
+			await slack.updateMessage(message.channelId, thinkingTs, result.text ?? "_No response_");
+		} catch (err) {
+			logger.error({ err, userId: user.id, channelId: message.channelId }, "Agent run failed");
+			await slack.updateMessage(message.channelId, thinkingTs, "_Something went wrong, try again_");
+		}
+	});
+});
+
+// 10. Start Slack bot
 await slack.start();
 logger.info("Sketch is running");
 

@@ -25,6 +25,10 @@ export interface RunAgentParams {
 	workspaceDir: string;
 	userName: string;
 	logger: Logger;
+	channelContext?: {
+		channelName: string;
+		recentMessages: Array<{ userName: string; text: string }>;
+	};
 }
 
 export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
@@ -36,6 +40,7 @@ export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
 		platform: "slack",
 		userName,
 		workspaceDir: absWorkspace,
+		channelContext: params.channelContext,
 	});
 
 	let sessionId = "";

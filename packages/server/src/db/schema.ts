@@ -9,6 +9,15 @@ export interface UsersTable {
 	created_at: Generated<string>;
 }
 
+export interface ChannelsTable {
+	id: string;
+	slack_channel_id: string;
+	name: string;
+	type: string;
+	created_at: Generated<string>;
+}
+
 export interface DB {
 	users: UsersTable;
+	channels: ChannelsTable;
 }
