@@ -1,7 +1,13 @@
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 /**
  * Core agent execution — invokes the Claude Agent SDK's query() in a user's
  * isolated workspace with file access restrictions via canUseTool.
+ *
+ * Skills support: the SDK discovers skills from ~/.claude/skills/ (org-wide via
+ * "user" settingSource) and {workspace}/.claude/skills/ (per-user via "project").
+ * canUseTool grants read-only file access and Bash execution for ~/.claude paths
+ * so skills can be loaded and their companion CLIs executed.
  */
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Logger } from "../logger";
@@ -48,24 +54,29 @@ export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
 			},
 			permissionMode: "default" as const,
 			allowDangerouslySkipPermissions: false,
-			settingSources: ["project"],
+			settingSources: ["project", "user"],
 			stderr: (data) => {
 				logger.debug({ stderr: data.trim() }, "Agent subprocess");
 			},
 			canUseTool: async (toolName, input) => {
 				logger.debug({ toolName }, "canUseTool called");
+				const absClaudeDir = resolve(homedir(), ".claude");
 
-				const permitted = ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebSearch", "WebFetch"];
+				const permitted = ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebSearch", "WebFetch", "Skill"];
 				if (!permitted.includes(toolName)) {
 					return { behavior: "deny" as const, message: `Tool ${toolName} is not allowed` };
 				}
 
-				// File tools: validate path is within workspace
+				// File tools: workspace (full access) + ~/.claude (read-only for skill loading)
 				const fileTools = ["Read", "Edit", "Write", "Glob", "Grep"];
 				if (fileTools.includes(toolName)) {
 					const rawPath = (input.file_path as string) || (input.path as string) || absWorkspace;
 					const filePath = resolve(rawPath);
 					if (!filePath.startsWith(absWorkspace)) {
+						const readOnlyTools = ["Read", "Glob", "Grep"];
+						if (readOnlyTools.includes(toolName) && filePath.startsWith(absClaudeDir)) {
+							return { behavior: "allow" as const, updatedInput: input };
+						}
 						logger.warn({ toolName, filePath, absWorkspace }, "Blocked file access outside workspace");
 						return {
 							behavior: "deny" as const,
@@ -74,11 +85,11 @@ export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
 					}
 				}
 
-				// Bash: deny commands that reference paths outside workspace
+				// Bash: allow workspace + ~/.claude paths, deny everything else
 				if (toolName === "Bash") {
 					const command = (input.command as string) || "";
 					const hasAbsolutePath = /(?:^|\s)\/(?!data\/|dev\/null|tmp\/)/.test(command);
-					if (hasAbsolutePath && !command.includes(absWorkspace)) {
+					if (hasAbsolutePath && !command.includes(absWorkspace) && !command.includes(absClaudeDir)) {
 						logger.warn({ toolName, command, absWorkspace }, "Blocked bash command referencing outside paths");
 						return {
 							behavior: "deny" as const,
