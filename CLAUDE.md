@@ -12,7 +12,14 @@ Org-level AI assistant — single deployment, multiple users, each with isolated
 
 ## Tech Stack
 
-TypeScript, Node.js 22, pnpm monorepo, Hono, Kysely, Biome, pino, zod, tsdown, tsx
+TypeScript, Node.js 24, pnpm monorepo, Hono, Kysely, Biome, pino, zod, tsdown, tsx
+
+## Node Version Management
+
+- `.node-version` specifies Node 24
+- Local dev (macOS): **nvm** — auto-switches via `.node-version`
+- EC2 server: **fnm** — auto-switches via `.node-version` (still on Node 22, pending upgrade)
+- Claude Code's shell does NOT auto-load nvm/fnm, so it defaults to `/opt/homebrew/bin/node`. Currently this is also Node 24, so no prefix needed. If versions ever diverge again, prefix commands with: `. /Users/rnijhara/.nvm/nvm.sh && nvm use > /dev/null 2>&1 &&`
 
 ## Project Structure
 
@@ -80,8 +87,11 @@ Internal planning docs live in `.planning/` (gitignored):
 - **PRODUCT.md** — high-level product document. The "what and why". Evolves slowly.
 - **STATE.md** — current project state, what's done, next steps, current version. Updated at end of each work session. Quick context resume for new sessions.
 - **Task files** — one per feature/story (e.g., `STEEL_THREAD.md`, `WHATSAPP_ADAPTER.md`). Implementation plans with phases. Become historical reference once done.
+- **TODO.md** — tracked todos and backlog items. Lives in `.planning/TODO.md`.
 
 Completed task files stay in `.planning/` — useful context when revisiting related areas.
+
+**Planning approach:** Don't use plan mode. Instead, write design/plan docs directly as task files in `.planning/` (e.g., `.planning/FILE_SUPPORT.md`). Discuss and refine in conversation, then write the doc when ready.
 
 ## Reference
 
