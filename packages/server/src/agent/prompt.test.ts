@@ -112,6 +112,34 @@ describe("buildSystemContext", () => {
 		});
 	});
 
+	describe("file attachments", () => {
+		const result = buildSystemContext({
+			platform: "slack",
+			userName: "Eve",
+			workspaceDir: "/data/workspaces/u789",
+		});
+
+		it("includes file attachments section", () => {
+			expect(result).toContain("## File Attachments");
+		});
+
+		it("mentions the attachments directory", () => {
+			expect(result).toContain("attachments/");
+		});
+
+		it("mentions images shown directly", () => {
+			expect(result).toContain("Images are shown directly");
+		});
+
+		it("mentions Read tool for non-image files", () => {
+			expect(result).toContain("Read tool");
+		});
+
+		it("mentions SendFileToChat tool for sending files back", () => {
+			expect(result).toContain("SendFileToChat");
+		});
+	});
+
 	describe("channel context with empty recent messages", () => {
 		const result = buildSystemContext({
 			platform: "slack",

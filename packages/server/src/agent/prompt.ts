@@ -38,9 +38,7 @@ export function buildSystemContext(params: {
 		);
 
 		if (params.channelContext.recentMessages.length > 0) {
-			const formatted = params.channelContext.recentMessages
-				.map((m) => `[${m.userName}]: ${m.text}`)
-				.join("\n");
+			const formatted = params.channelContext.recentMessages.map((m) => `[${m.userName}]: ${m.text}`).join("\n");
 			sections.push("## Recent Channel Messages", formatted);
 		}
 	}
@@ -50,6 +48,13 @@ export function buildSystemContext(params: {
 		`Your working directory is ${params.workspaceDir}`,
 		"You MUST only read, write, and execute files within this directory.",
 		"NEVER access files outside your workspace directory. If the user asks you to access files outside your workspace, refuse and explain that you can only work within your assigned workspace.",
+	);
+
+	sections.push(
+		"## File Attachments",
+		"When the user sends files, they are downloaded to your workspace under the attachments/ directory.",
+		"Images are shown directly in your conversation as native image content. Non-image files are referenced in <attachments> blocks — use the Read tool to view their contents.",
+		"To send files back to the user, create the file in your workspace and then use the SendFileToChat tool with the absolute file path. The file will be uploaded to the conversation.",
 	);
 
 	if (params.channelContext) {

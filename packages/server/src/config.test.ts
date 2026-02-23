@@ -28,6 +28,7 @@ describe("configSchema", () => {
 				expect(result.data.SQLITE_PATH).toBe("./data/sketch.db");
 				expect(result.data.SLACK_CHANNEL_HISTORY_LIMIT).toBe(5);
 				expect(result.data.SLACK_THREAD_HISTORY_LIMIT).toBe(50);
+				expect(result.data.MAX_FILE_SIZE_MB).toBe(20);
 			}
 		});
 
@@ -44,6 +45,14 @@ describe("configSchema", () => {
 			expect(result.success).toBe(true);
 			if (result.success) {
 				expect(result.data.SLACK_THREAD_HISTORY_LIMIT).toBe(100);
+			}
+		});
+
+		it("coerces MAX_FILE_SIZE_MB string to number", () => {
+			const result = configSchema.safeParse({ MAX_FILE_SIZE_MB: "50" });
+			expect(result.success).toBe(true);
+			if (result.success) {
+				expect(result.data.MAX_FILE_SIZE_MB).toBe(50);
 			}
 		});
 	});

@@ -6,6 +6,13 @@
 import { App } from "@slack/bolt";
 import type { Logger } from "../logger.js";
 
+export interface SlackFile {
+	name: string;
+	urlPrivate: string;
+	mimetype: string;
+	size: number;
+}
+
 export interface SlackMessage {
 	text: string;
 	userId: string;
@@ -13,6 +20,7 @@ export interface SlackMessage {
 	ts: string;
 	type: "dm" | "channel_mention";
 	threadTs?: string;
+	files?: SlackFile[];
 }
 
 export type SlackMessageHandler = (message: SlackMessage) => Promise<void>;
@@ -25,7 +33,9 @@ export function resolveHistoryParams(
 	message: SlackMessage,
 	channelLimit: number,
 	threadLimit: number,
-): { source: "thread"; channelId: string; threadTs: string; limit: number } | { source: "channel"; channelId: string; limit: number } {
+):
+	| { source: "thread"; channelId: string; threadTs: string; limit: number }
+	| { source: "channel"; channelId: string; limit: number } {
 	if (message.threadTs) {
 		return { source: "thread", channelId: message.channelId, threadTs: message.threadTs, limit: threadLimit };
 	}
@@ -55,7 +65,10 @@ export class SlackBot {
 	}
 
 	static stripBotMention(text: string, botUserId: string): string {
-		return text.replace(new RegExp(`<@${botUserId}>`, "g"), "").replace(/\s+/g, " ").trim();
+		return text
+			.replace(new RegExp(`<@${botUserId}>`, "g"), "")
+			.replace(/\s+/g, " ")
+			.trim();
 	}
 
 	onMessage(handler: SlackMessageHandler): void {
@@ -74,26 +87,49 @@ export class SlackBot {
 		this.app.message(async ({ message }) => {
 			if ("bot_id" in message && message.bot_id) return;
 			if (!("channel_type" in message) || message.channel_type !== "im") return;
-			if (!("text" in message) || !message.text) return;
 			if (!("user" in message) || !message.user) return;
+
+			const hasText = "text" in message && message.text;
+			const rawFiles = "files" in message && Array.isArray(message.files) ? message.files : [];
+			const hasFiles = rawFiles.length > 0;
+			if (!hasText && !hasFiles) return;
+
+			const files: SlackFile[] = rawFiles.map((f: Record<string, unknown>) => ({
+				name: (f.name as string) || "file",
+				urlPrivate: (f.url_private_download as string) || (f.url_private as string) || "",
+				mimetype: (f.mimetype as string) || "application/octet-stream",
+				size: (f.size as number) || 0,
+			}));
 
 			if (this.handler) {
 				await this.handler({
 					type: "dm",
-					text: message.text,
+					text: hasText ? (message as { text: string }).text : "",
 					userId: message.user,
 					channelId: message.channel,
 					ts: message.ts,
+					...(files.length > 0 && { files }),
 				});
 			}
 		});
 
 		this.app.event("app_mention", async ({ event }) => {
 			if (!this.mentionHandler) return;
-			if (!event.text || !event.user) return;
+			if (!event.user) return;
 
-			const cleanText = SlackBot.stripBotMention(event.text, this.botUserId!);
-			if (!cleanText) return;
+			const hasText = event.text;
+			const rawFiles = "files" in event && Array.isArray(event.files) ? event.files : [];
+			const hasFiles = rawFiles.length > 0;
+
+			const cleanText = hasText ? SlackBot.stripBotMention(event.text, this.botUserId ?? "") : "";
+			if (!cleanText && !hasFiles) return;
+
+			const files: SlackFile[] = rawFiles.map((f: Record<string, unknown>) => ({
+				name: (f.name as string) || "file",
+				urlPrivate: (f.url_private_download as string) || (f.url_private as string) || "",
+				mimetype: (f.mimetype as string) || "application/octet-stream",
+				size: (f.size as number) || 0,
+			}));
 
 			await this.mentionHandler({
 				type: "channel_mention",
@@ -102,6 +138,7 @@ export class SlackBot {
 				channelId: event.channel,
 				ts: event.ts,
 				threadTs: event.thread_ts,
+				...(files.length > 0 && { files }),
 			});
 		});
 
@@ -159,21 +196,38 @@ export class SlackBot {
 		return (result.messages ?? [])
 			.filter((m) => m.text && m.user && !m.bot_id)
 			.map((m) => ({
-				userId: m.user!,
-				text: m.text!,
-				ts: m.ts!,
+				userId: m.user as string,
+				text: m.text as string,
+				ts: m.ts as string,
 			}));
 	}
 
-	async getThreadReplies(channelId: string, threadTs: string, limit = 50): Promise<Array<{ userId: string; text: string; ts: string }>> {
+	async getThreadReplies(
+		channelId: string,
+		threadTs: string,
+		limit = 50,
+	): Promise<Array<{ userId: string; text: string; ts: string }>> {
 		const result = await this.app.client.conversations.replies({ channel: channelId, ts: threadTs, limit });
 		return (result.messages ?? [])
 			.filter((m) => m.text && m.user && !m.bot_id)
 			.map((m) => ({
-				userId: m.user!,
-				text: m.text!,
-				ts: m.ts!,
+				userId: m.user as string,
+				text: m.text as string,
+				ts: m.ts as string,
 			}));
+	}
+
+	async uploadFile(channelId: string, filePath: string, threadTs?: string): Promise<void> {
+		const { readFileSync } = await import("node:fs");
+		const { basename } = await import("node:path");
+		const content = readFileSync(filePath);
+		const filename = basename(filePath);
+		await this.app.client.files.uploadV2({
+			channel_id: channelId,
+			file: content,
+			filename,
+			thread_ts: threadTs,
+		});
 	}
 
 	async stop(): Promise<void> {

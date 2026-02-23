@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import { runAgent } from "./agent/runner";
 import { ensureChannelWorkspace, ensureWorkspace } from "./agent/workspace";
@@ -6,6 +7,7 @@ import { createDatabase } from "./db/index";
 import { runMigrations } from "./db/migrate";
 import { createChannelRepository } from "./db/repositories/channels";
 import { createUserRepository } from "./db/repositories/users";
+import { type Attachment, downloadSlackFile } from "./files";
 import { createApp } from "./http";
 import { createLogger } from "./logger";
 import { QueueManager } from "./queue";
@@ -63,16 +65,65 @@ slack.onMessage(async (message) => {
 		// Ensure workspace
 		const workspaceDir = await ensureWorkspace(config, user.id);
 
+		// Download any attached files
+		const attachments: Attachment[] = [];
+		if (message.files?.length) {
+			logger.debug(
+				{
+					fileCount: message.files.length,
+					files: message.files.map((f) => ({
+						name: f.name,
+						mime: f.mimetype,
+						size: f.size,
+						url: f.urlPrivate?.slice(0, 80),
+					})),
+				},
+				"Files received from Slack",
+			);
+			const attachDir = join(workspaceDir, "attachments");
+			const maxBytes = config.MAX_FILE_SIZE_MB * 1024 * 1024;
+			for (const file of message.files) {
+				try {
+					const downloaded = await downloadSlackFile(
+						file.urlPrivate,
+						config.SLACK_BOT_TOKEN as string,
+						attachDir,
+						maxBytes,
+						logger,
+					);
+					attachments.push(downloaded);
+				} catch (err) {
+					logger.warn({ err, fileName: file.name }, "Failed to download file");
+				}
+			}
+			logger.debug(
+				{
+					attachmentCount: attachments.length,
+					attachments: attachments.map((a) => ({ name: a.originalName, mime: a.mimeType, size: a.sizeBytes })),
+				},
+				"Files downloaded",
+			);
+		}
+
 		// Post thinking indicator
 		const thinkingTs = await slack.postMessage(message.channelId, "_Thinking..._");
 
 		try {
 			const result = await runAgent({
-				userMessage: message.text,
+				userMessage: message.text || "See attached files.",
 				workspaceDir,
 				userName: user.name,
 				logger,
+				attachments: attachments.length > 0 ? attachments : undefined,
 			});
+
+			for (const filePath of result.pendingUploads) {
+				try {
+					await slack.uploadFile(message.channelId, filePath);
+				} catch (err) {
+					logger.warn({ err, filePath }, "Failed to upload file to Slack");
+				}
+			}
 
 			await slack.updateMessage(message.channelId, thinkingTs, result.text ?? "_No response_");
 		} catch (err) {
@@ -87,10 +138,7 @@ slack.onChannelMention(async (message) => {
 	const queue = queueManager.getQueue(message.channelId);
 
 	queue.enqueue(async () => {
-		logger.info(
-			{ slackUserId: message.userId, channelId: message.channelId },
-			"Processing channel mention",
-		);
+		logger.info({ slackUserId: message.userId, channelId: message.channelId }, "Processing channel mention");
 
 		// Resolve or create user
 		let user = await users.findBySlackId(message.userId);
@@ -118,15 +166,60 @@ slack.onChannelMention(async (message) => {
 		// Ensure channel workspace
 		const workspaceDir = await ensureChannelWorkspace(config, message.channelId);
 
+		// Download any attached files
+		const attachments: Attachment[] = [];
+		if (message.files?.length) {
+			logger.debug(
+				{
+					fileCount: message.files.length,
+					files: message.files.map((f) => ({
+						name: f.name,
+						mime: f.mimetype,
+						size: f.size,
+						url: f.urlPrivate?.slice(0, 80),
+					})),
+				},
+				"Files received from Slack",
+			);
+			const attachDir = join(workspaceDir, "attachments");
+			const maxBytes = config.MAX_FILE_SIZE_MB * 1024 * 1024;
+			for (const file of message.files) {
+				try {
+					const downloaded = await downloadSlackFile(
+						file.urlPrivate,
+						config.SLACK_BOT_TOKEN as string,
+						attachDir,
+						maxBytes,
+						logger,
+					);
+					attachments.push(downloaded);
+				} catch (err) {
+					logger.warn({ err, fileName: file.name }, "Failed to download file");
+				}
+			}
+			logger.debug(
+				{
+					attachmentCount: attachments.length,
+					attachments: attachments.map((a) => ({ name: a.originalName, mime: a.mimeType, size: a.sizeBytes })),
+				},
+				"Files downloaded",
+			);
+		}
+
 		// Fetch context: thread replies if in a thread, otherwise top-level channel messages
-		const historyParams = resolveHistoryParams(message, config.SLACK_CHANNEL_HISTORY_LIMIT, config.SLACK_THREAD_HISTORY_LIMIT);
+		const historyParams = resolveHistoryParams(
+			message,
+			config.SLACK_CHANNEL_HISTORY_LIMIT,
+			config.SLACK_THREAD_HISTORY_LIMIT,
+		);
 		logger.debug(
 			{ source: historyParams.source, limit: historyParams.limit, threadTs: message.threadTs },
 			"Fetching context history",
 		);
-		const history = historyParams.source === "thread"
-			? await slack.getThreadReplies(historyParams.channelId, historyParams.threadTs, historyParams.limit)
-			: await slack.getChannelHistory(historyParams.channelId, historyParams.limit);
+		const history =
+			historyParams.source === "thread"
+				? await slack.getThreadReplies(historyParams.channelId, historyParams.threadTs, historyParams.limit)
+				: await slack.getChannelHistory(historyParams.channelId, historyParams.limit);
 		logger.debug({ messageCount: history.length }, "Raw history fetched");
 		const recentMessages: Array<{ userName: string; text: string }> = [];
 		for (const msg of history.reverse()) {
@@ -138,7 +231,10 @@ slack.onChannelMention(async (message) => {
 			}
 		}
 		logger.debug(
-			{ messageCount: recentMessages.length, messages: recentMessages.map((m) => `[${m.userName}]: ${m.text.slice(0, 80)}`) },
+			{
+				messageCount: recentMessages.length,
+				messages: recentMessages.map((m) => `[${m.userName}]: ${m.text.slice(0, 80)}`),
+			},
 			"Context messages resolved",
 		);
 
@@ -148,15 +244,24 @@ slack.onChannelMention(async (message) => {
 
 		try {
 			const result = await runAgent({
-				userMessage: message.text,
+				userMessage: message.text || "See attached files.",
 				workspaceDir,
 				userName: user.name,
 				logger,
+				attachments: attachments.length > 0 ? attachments : undefined,
 				channelContext: {
 					channelName: channel.name,
 					recentMessages,
 				},
 			});
+
+			for (const filePath of result.pendingUploads) {
+				try {
+					await slack.uploadFile(message.channelId, filePath, threadTs);
+				} catch (err) {
+					logger.warn({ err, filePath }, "Failed to upload file to Slack");
+				}
+			}
 
 			await slack.updateMessage(message.channelId, thinkingTs, result.text ?? "_No response_");
 		} catch (err) {
