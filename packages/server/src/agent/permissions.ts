@@ -24,8 +24,8 @@ export function createCanUseTool(absWorkspace: string, logger: Logger, claudeDir
 	return async (toolName: string, input: Record<string, unknown>): Promise<PermissionResult> => {
 		logger.debug({ toolName }, "canUseTool called");
 
-		// Layer 1: tool allowlist
-		if (!PERMITTED_TOOLS.includes(toolName)) {
+		// Layer 1: tool allowlist (all MCP tools are allowed — they come from servers we configure)
+		if (!PERMITTED_TOOLS.includes(toolName) && !toolName.startsWith("mcp__")) {
 			return { behavior: "deny", message: `Tool ${toolName} is not allowed` };
 		}
 

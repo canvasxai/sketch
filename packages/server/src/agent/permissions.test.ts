@@ -47,6 +47,27 @@ describe("createCanUseTool", () => {
 			expectDeny(result);
 			expect(result.message).toContain("not allowed");
 		});
+
+		it("allows MCP tool from sketch server", async () => {
+			const result = await canUseTool("mcp__sketch__SendFileToChat", { file_path: "/some/path" });
+			expect(result.behavior).toBe("allow");
+		});
+
+		it("allows MCP tool from any server", async () => {
+			const result = await canUseTool("mcp__some-other-server__SomeTool", { param: "value" });
+			expect(result.behavior).toBe("allow");
+		});
+
+		it("allows MCP tool with deeply nested server name", async () => {
+			const result = await canUseTool("mcp__my-org__my-tool__action", {});
+			expect(result.behavior).toBe("allow");
+		});
+
+		it("denies tool that contains mcp but does not start with mcp__", async () => {
+			const result = await canUseTool("mcp_missing_prefix", {});
+			expectDeny(result);
+			expect(result.message).toContain("not allowed");
+		});
 	});
 
 	describe("file tools — workspace access", () => {
