@@ -26,6 +26,24 @@ describe("configSchema", () => {
 				expect(result.data.LOG_LEVEL).toBe("info");
 				expect(result.data.DATA_DIR).toBe("./data");
 				expect(result.data.SQLITE_PATH).toBe("./data/sketch.db");
+				expect(result.data.SLACK_CHANNEL_HISTORY_LIMIT).toBe(5);
+				expect(result.data.SLACK_THREAD_HISTORY_LIMIT).toBe(50);
+			}
+		});
+
+		it("coerces SLACK_CHANNEL_HISTORY_LIMIT string to number", () => {
+			const result = configSchema.safeParse({ SLACK_CHANNEL_HISTORY_LIMIT: "10" });
+			expect(result.success).toBe(true);
+			if (result.success) {
+				expect(result.data.SLACK_CHANNEL_HISTORY_LIMIT).toBe(10);
+			}
+		});
+
+		it("coerces SLACK_THREAD_HISTORY_LIMIT string to number", () => {
+			const result = configSchema.safeParse({ SLACK_THREAD_HISTORY_LIMIT: "100" });
+			expect(result.success).toBe(true);
+			if (result.success) {
+				expect(result.data.SLACK_THREAD_HISTORY_LIMIT).toBe(100);
 			}
 		});
 	});

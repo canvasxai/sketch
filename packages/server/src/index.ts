@@ -9,7 +9,7 @@ import { createUserRepository } from "./db/repositories/users";
 import { createApp } from "./http";
 import { createLogger } from "./logger";
 import { QueueManager } from "./queue";
-import { SlackBot } from "./slack/bot";
+import { SlackBot, resolveHistoryParams } from "./slack/bot";
 
 // 1. Config
 const config = loadConfig();
@@ -118,8 +118,16 @@ slack.onChannelMention(async (message) => {
 		// Ensure channel workspace
 		const workspaceDir = await ensureChannelWorkspace(config, message.channelId);
 
-		// Fetch recent channel messages for context
-		const history = await slack.getChannelHistory(message.channelId, 20);
+		// Fetch context: thread replies if in a thread, otherwise top-level channel messages
+		const historyParams = resolveHistoryParams(message, config.SLACK_CHANNEL_HISTORY_LIMIT, config.SLACK_THREAD_HISTORY_LIMIT);
+		logger.debug(
+			{ source: historyParams.source, limit: historyParams.limit, threadTs: message.threadTs },
+			"Fetching context history",
+		);
+		const history = historyParams.source === "thread"
+			? await slack.getThreadReplies(historyParams.channelId, historyParams.threadTs, historyParams.limit)
+			: await slack.getChannelHistory(historyParams.channelId, historyParams.limit);
+		logger.debug({ messageCount: history.length }, "Raw history fetched");
 		const recentMessages: Array<{ userName: string; text: string }> = [];
 		for (const msg of history.reverse()) {
 			try {
@@ -129,9 +137,14 @@ slack.onChannelMention(async (message) => {
 				recentMessages.push({ userName: "Unknown", text: msg.text });
 			}
 		}
+		logger.debug(
+			{ messageCount: recentMessages.length, messages: recentMessages.map((m) => `[${m.userName}]: ${m.text.slice(0, 80)}`) },
+			"Context messages resolved",
+		);
 
-		// Post thinking indicator in thread
-		const thinkingTs = await slack.postThreadReply(message.channelId, message.ts, "_Thinking..._");
+		// Post thinking indicator in thread (use existing thread or start new one)
+		const threadTs = message.threadTs ?? message.ts;
+		const thinkingTs = await slack.postThreadReply(message.channelId, threadTs, "_Thinking..._");
 
 		try {
 			const result = await runAgent({

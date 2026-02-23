@@ -12,9 +12,25 @@ export interface SlackMessage {
 	channelId: string;
 	ts: string;
 	type: "dm" | "channel_mention";
+	threadTs?: string;
 }
 
 export type SlackMessageHandler = (message: SlackMessage) => Promise<void>;
+
+/**
+ * Determines whether to fetch thread replies or channel history based on
+ * whether the mention is inside a thread.
+ */
+export function resolveHistoryParams(
+	message: SlackMessage,
+	channelLimit: number,
+	threadLimit: number,
+): { source: "thread"; channelId: string; threadTs: string; limit: number } | { source: "channel"; channelId: string; limit: number } {
+	if (message.threadTs) {
+		return { source: "thread", channelId: message.channelId, threadTs: message.threadTs, limit: threadLimit };
+	}
+	return { source: "channel", channelId: message.channelId, limit: channelLimit };
+}
 
 export interface SlackBotConfig {
 	appToken: string;
@@ -85,6 +101,7 @@ export class SlackBot {
 				userId: event.user,
 				channelId: event.channel,
 				ts: event.ts,
+				threadTs: event.thread_ts,
 			});
 		});
 
@@ -137,8 +154,19 @@ export class SlackBot {
 		};
 	}
 
-	async getChannelHistory(channelId: string, limit = 20): Promise<Array<{ userId: string; text: string; ts: string }>> {
+	async getChannelHistory(channelId: string, limit = 5): Promise<Array<{ userId: string; text: string; ts: string }>> {
 		const result = await this.app.client.conversations.history({ channel: channelId, limit });
+		return (result.messages ?? [])
+			.filter((m) => m.text && m.user && !m.bot_id)
+			.map((m) => ({
+				userId: m.user!,
+				text: m.text!,
+				ts: m.ts!,
+			}));
+	}
+
+	async getThreadReplies(channelId: string, threadTs: string, limit = 50): Promise<Array<{ userId: string; text: string; ts: string }>> {
+		const result = await this.app.client.conversations.replies({ channel: channelId, ts: threadTs, limit });
 		return (result.messages ?? [])
 			.filter((m) => m.text && m.user && !m.bot_id)
 			.map((m) => ({

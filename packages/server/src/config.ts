@@ -24,6 +24,10 @@ export const configSchema = z.object({
 	SLACK_APP_TOKEN: z.string().startsWith("xapp-").optional(),
 	SLACK_BOT_TOKEN: z.string().startsWith("xoxb-").optional(),
 
+	// Slack context
+	SLACK_CHANNEL_HISTORY_LIMIT: z.coerce.number().default(5),
+	SLACK_THREAD_HISTORY_LIMIT: z.coerce.number().default(50),
+
 	// Server
 	DATA_DIR: z.string().default("./data"),
 	PORT: z.coerce.number().default(3000),
