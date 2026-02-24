@@ -13,9 +13,11 @@
 	},
 	"dependencies": {
 		"@anthropic-ai/claude-agent-sdk": "^0.2.45",
+		"@hapi/boom": "^10.0.1",
 		"@hono/node-server": "^1.19.9",
 		"@sketch/shared": "workspace:*",
 		"@slack/bolt": "^4.6.0",
+		"@whiskeysockets/baileys": "7.0.0-rc.9",
 		"better-sqlite3": "^12.6.2",
 		"dotenv": "^17.3.1",
 		"hono": "^4.11.9",

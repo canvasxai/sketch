@@ -70,6 +70,7 @@ sketch/
 - No unnecessary inline comments — prefer docstrings explaining decisions
 - Vitest for testing
 - Run `pnpm dev` from repo root — tsx watches `packages/server/src/index.ts`
+- At the end of every feature, run all quality checks: `pnpm biome check`, `npx tsc --noEmit`, `pnpm test`, `pnpm build`
 
 ## Key Design Decisions
 

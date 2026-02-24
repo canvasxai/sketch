@@ -7,6 +7,7 @@ import {
 	downloadSlackFile,
 	formatAttachmentsForPrompt,
 	isImageAttachment,
+	mimeToExtension,
 	splitAttachments,
 } from "./files";
 import type { Attachment } from "./files";
@@ -282,5 +283,35 @@ describe("buildMultimodalContent", () => {
 		expect(textBlock.text).toContain('name="data.csv"');
 		expect(textBlock.text).not.toContain("photo.png");
 		expect(blocks[1].type).toBe("image");
+	});
+});
+
+describe("mimeToExtension", () => {
+	it("returns correct extensions for common image types", () => {
+		expect(mimeToExtension("image/jpeg")).toBe("jpg");
+		expect(mimeToExtension("image/png")).toBe("png");
+		expect(mimeToExtension("image/webp")).toBe("webp");
+		expect(mimeToExtension("image/gif")).toBe("gif");
+	});
+
+	it("returns correct extensions for audio/video types", () => {
+		expect(mimeToExtension("video/mp4")).toBe("mp4");
+		expect(mimeToExtension("audio/ogg; codecs=opus")).toBe("ogg");
+		expect(mimeToExtension("audio/mp4")).toBe("m4a");
+		expect(mimeToExtension("audio/mpeg")).toBe("mp3");
+	});
+
+	it("returns correct extension for PDF", () => {
+		expect(mimeToExtension("application/pdf")).toBe("pdf");
+	});
+
+	it("returns 'bin' for unknown types", () => {
+		expect(mimeToExtension("application/x-custom")).toBe("bin");
+		expect(mimeToExtension("text/csv")).toBe("bin");
+	});
+
+	it("returns 'bin' for null/undefined", () => {
+		expect(mimeToExtension(null)).toBe("bin");
+		expect(mimeToExtension(undefined)).toBe("bin");
 	});
 });

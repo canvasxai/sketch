@@ -29,6 +29,7 @@ export interface RunAgentParams {
 	workspaceDir: string;
 	userName: string;
 	logger: Logger;
+	platform: "slack" | "whatsapp";
 	attachments?: Attachment[];
 	threadTs?: string;
 	channelContext?: {
@@ -43,7 +44,7 @@ export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
 	const absWorkspace = resolve(workspaceDir);
 
 	const systemAppend = buildSystemContext({
-		platform: "slack",
+		platform: params.platform,
 		userName,
 		workspaceDir: absWorkspace,
 		channelContext: params.channelContext,

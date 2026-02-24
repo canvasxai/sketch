@@ -17,7 +17,21 @@ export interface ChannelsTable {
 	created_at: Generated<string>;
 }
 
+export interface WhatsAppCredsTable {
+	id: string;
+	creds: string;
+	updated_at: Generated<string>;
+}
+
+export interface WhatsAppKeysTable {
+	type: string;
+	key_id: string;
+	value: string;
+}
+
 export interface DB {
 	users: UsersTable;
 	channels: ChannelsTable;
+	whatsapp_creds: WhatsAppCredsTable;
+	whatsapp_keys: WhatsAppKeysTable;
 }

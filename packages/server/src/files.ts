@@ -1,16 +1,18 @@
 /**
  * Channel-agnostic file download, storage, and prompt construction utilities.
  *
- * Downloads files from platform-specific URLs (Slack url_private, etc.) and saves
- * them to the user's workspace. Slack requires Bearer auth on the initial request
- * but redirects to CDN pre-signed URLs — auth must be stripped on redirect to avoid
- * leaking the token to external hosts.
+ * Downloads files from platform-specific URLs (Slack url_private, WhatsApp media)
+ * and saves them to the user's workspace. Slack requires Bearer auth on the initial
+ * request but redirects to CDN pre-signed URLs — auth must be stripped on redirect
+ * to avoid leaking the token to external hosts. WhatsApp uses Baileys'
+ * downloadMediaMessage which handles decryption internally.
  *
  * Image attachments are detected by MIME type and can be split from non-images for
  * multimodal prompt construction (base64 ImageBlockParam for native vision).
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { downloadMediaMessage, getContentType, type WASocket, type proto } from "@whiskeysockets/baileys";
 import type { Logger } from "./logger";
 
 export interface Attachment {
@@ -159,4 +161,72 @@ export async function buildMultimodalContent(textPrompt: string, attachments: At
 	}
 
 	return blocks;
+}
+
+const MIME_EXTENSION_MAP: Record<string, string> = {
+	"image/jpeg": "jpg",
+	"image/png": "png",
+	"image/webp": "webp",
+	"image/gif": "gif",
+	"video/mp4": "mp4",
+	"audio/ogg; codecs=opus": "ogg",
+	"audio/mp4": "m4a",
+	"audio/mpeg": "mp3",
+	"application/pdf": "pdf",
+};
+
+export function mimeToExtension(mime: string | undefined | null): string {
+	if (!mime) return "bin";
+	return MIME_EXTENSION_MAP[mime] ?? "bin";
+}
+
+const EXTENSION_MIME_MAP: Record<string, string> = Object.fromEntries(
+	Object.entries(MIME_EXTENSION_MAP).map(([mime, ext]) => [ext, mime]),
+);
+
+export function extensionToMime(ext: string): string {
+	return EXTENSION_MIME_MAP[ext.toLowerCase()] ?? "application/octet-stream";
+}
+
+/**
+ * Downloads media from a WhatsApp message using Baileys' built-in decryption.
+ * Saves to destDir with a timestamped sanitized filename.
+ */
+export async function downloadWhatsAppMedia(
+	msg: proto.IWebMessageInfo,
+	sock: WASocket,
+	destDir: string,
+	maxSizeBytes: number,
+	logger?: Logger,
+): Promise<Attachment> {
+	await mkdir(destDir, { recursive: true });
+
+	const buffer = await downloadMediaMessage(msg as Parameters<typeof downloadMediaMessage>[0], "buffer", {}, {
+		reuploadRequest: sock.updateMediaMessage,
+		logger: logger as any,
+	});
+
+	if (buffer.length > maxSizeBytes) {
+		throw new Error(`File exceeds ${Math.round(maxSizeBytes / (1024 * 1024))}MB limit`);
+	}
+
+	const messageType = getContentType(msg.message!);
+	const mediaMsg = msg.message![messageType as keyof typeof msg.message] as any;
+	const mimeType: string = mediaMsg?.mimetype ?? "application/octet-stream";
+	const originalName: string = mediaMsg?.fileName ?? `${Date.now()}.${mimeToExtension(mimeType)}`;
+
+	const sanitized = sanitizeFilename(originalName);
+	const fileName = `${Date.now()}_${sanitized}`;
+	const localPath = join(destDir, fileName);
+
+	await writeFile(localPath, buffer);
+
+	logger?.debug({ originalName: sanitized, mimeType, sizeBytes: buffer.length, localPath }, "WhatsApp media downloaded");
+
+	return {
+		originalName: sanitized,
+		mimeType,
+		localPath,
+		sizeBytes: buffer.length,
+	};
 }

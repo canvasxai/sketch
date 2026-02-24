@@ -66,8 +66,13 @@ export function validateConfig(config: Config): void {
 		process.exit(1);
 	}
 
-	if (!config.SLACK_APP_TOKEN || !config.SLACK_BOT_TOKEN) {
-		console.error("Must set SLACK_APP_TOKEN and SLACK_BOT_TOKEN");
+	// Slack tokens are optional, but if one is provided, both must be
+	if (config.SLACK_APP_TOKEN && !config.SLACK_BOT_TOKEN) {
+		console.error("SLACK_APP_TOKEN provided without SLACK_BOT_TOKEN");
+		process.exit(1);
+	}
+	if (config.SLACK_BOT_TOKEN && !config.SLACK_APP_TOKEN) {
+		console.error("SLACK_BOT_TOKEN provided without SLACK_APP_TOKEN");
 		process.exit(1);
 	}
 

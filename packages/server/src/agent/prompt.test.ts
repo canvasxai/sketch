@@ -49,9 +49,26 @@ describe("buildSystemContext", () => {
 			workspaceDir: "/data/workspaces/u456",
 		});
 
+		it("includes WhatsApp formatting rules", () => {
+			expect(result).toContain("## Platform: WhatsApp");
+			expect(result).toContain("*bold*");
+			expect(result).toContain("_italic_");
+			expect(result).toContain("~strikethrough~");
+			expect(result).toContain("```monospace```");
+		});
+
 		it("does not include Slack-specific rules", () => {
 			expect(result).not.toContain("mrkdwn");
 			expect(result).not.toContain("<url|text>");
+		});
+
+		it("includes no-tables instruction", () => {
+			expect(result).toContain("Do not use tables");
+		});
+
+		it("includes no-markdown-links instruction", () => {
+			expect(result).toContain("Do not use markdown links");
+			expect(result).toContain("write URLs inline");
 		});
 
 		it("includes workspace isolation section with the workspace path", () => {
@@ -63,7 +80,13 @@ describe("buildSystemContext", () => {
 			expect(result).toContain("MUST only read, write, and execute files within this directory");
 		});
 
-		it("includes user name", () => {
+		it("includes file attachments section", () => {
+			expect(result).toContain("## File Attachments");
+			expect(result).toContain("SendFileToChat");
+		});
+
+		it("includes user name under User heading", () => {
+			expect(result).toContain("## User");
 			expect(result).toContain("Bob");
 		});
 	});

@@ -20,6 +20,15 @@ export interface SlackFile {
 	size: number;
 }
 
+/** Shape of file objects in raw Slack message events (not typed by Bolt SDK). */
+interface RawSlackFile {
+	name?: string;
+	url_private_download?: string;
+	url_private?: string;
+	mimetype?: string;
+	size?: number;
+}
+
 export interface SlackMessage {
 	text: string;
 	userId: string;
@@ -94,11 +103,11 @@ export class SlackBot {
 				const hasFiles = rawFiles.length > 0;
 				if (!hasText && !hasFiles) return;
 
-				const files: SlackFile[] = rawFiles.map((f: Record<string, unknown>) => ({
-					name: (f.name as string) || "file",
-					urlPrivate: (f.url_private_download as string) || (f.url_private as string) || "",
-					mimetype: (f.mimetype as string) || "application/octet-stream",
-					size: (f.size as number) || 0,
+				const files: SlackFile[] = (rawFiles as RawSlackFile[]).map((f) => ({
+					name: f.name || "file",
+					urlPrivate: f.url_private_download || f.url_private || "",
+					mimetype: f.mimetype || "application/octet-stream",
+					size: f.size || 0,
 				}));
 
 				await this.handler({
@@ -118,11 +127,11 @@ export class SlackBot {
 				const hasFiles = rawFiles.length > 0;
 				if (!hasText && !hasFiles) return;
 
-				const files: SlackFile[] = rawFiles.map((f: Record<string, unknown>) => ({
-					name: (f.name as string) || "file",
-					urlPrivate: (f.url_private_download as string) || (f.url_private as string) || "",
-					mimetype: (f.mimetype as string) || "application/octet-stream",
-					size: (f.size as number) || 0,
+				const files: SlackFile[] = (rawFiles as RawSlackFile[]).map((f) => ({
+					name: f.name || "file",
+					urlPrivate: f.url_private_download || f.url_private || "",
+					mimetype: f.mimetype || "application/octet-stream",
+					size: f.size || 0,
 				}));
 
 				await this.threadMessageHandler({
@@ -148,11 +157,11 @@ export class SlackBot {
 			const cleanText = hasText ? SlackBot.stripBotMention(event.text, this.botUserId ?? "") : "";
 			if (!cleanText && !hasFiles) return;
 
-			const files: SlackFile[] = rawFiles.map((f: Record<string, unknown>) => ({
-				name: (f.name as string) || "file",
-				urlPrivate: (f.url_private_download as string) || (f.url_private as string) || "",
-				mimetype: (f.mimetype as string) || "application/octet-stream",
-				size: (f.size as number) || 0,
+			const files: SlackFile[] = (rawFiles as RawSlackFile[]).map((f) => ({
+				name: f.name || "file",
+				urlPrivate: f.url_private_download || f.url_private || "",
+				mimetype: f.mimetype || "application/octet-stream",
+				size: f.size || 0,
 			}));
 
 			await this.mentionHandler({
@@ -250,8 +259,8 @@ export class SlackBot {
 			channel_id: channelId,
 			file: content,
 			filename,
-			thread_ts: threadTs,
-		});
+			thread_ts: threadTs!,
+		} as Parameters<typeof this.app.client.files.uploadV2>[0]);
 	}
 
 	async stop(): Promise<void> {

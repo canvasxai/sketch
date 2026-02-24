@@ -46,6 +46,24 @@ describe("create()", () => {
 		await users.create({ name: "Frank", slackUserId: "U006" });
 		await expect(users.create({ name: "Grace", slackUserId: "U006" })).rejects.toThrow();
 	});
+
+	it("creates user with whatsappNumber only (no slackUserId)", async () => {
+		const user = await users.create({ name: "Liam", whatsappNumber: "+919876543210" });
+		expect(user.name).toBe("Liam");
+		expect(user.whatsapp_number).toBe("+919876543210");
+		expect(user.slack_user_id).toBeNull();
+	});
+
+	it("creates user with both slackUserId and whatsappNumber", async () => {
+		const user = await users.create({ name: "Maya", slackUserId: "U100", whatsappNumber: "+14155551234" });
+		expect(user.slack_user_id).toBe("U100");
+		expect(user.whatsapp_number).toBe("+14155551234");
+	});
+
+	it("duplicate whatsapp_number throws", async () => {
+		await users.create({ name: "Noah", whatsappNumber: "+14155559999" });
+		await expect(users.create({ name: "Olivia", whatsappNumber: "+14155559999" })).rejects.toThrow();
+	});
 });
 
 describe("findBySlackId()", () => {
@@ -60,6 +78,22 @@ describe("findBySlackId()", () => {
 
 	it("returns undefined when not found", async () => {
 		const found = await users.findBySlackId("U999");
+		expect(found).toBeUndefined();
+	});
+});
+
+describe("findByWhatsappNumber()", () => {
+	it("returns user when found", async () => {
+		const created = await users.create({ name: "Kim", whatsappNumber: "+14155238886" });
+		const found = await users.findByWhatsappNumber("+14155238886");
+		expect(found).toBeDefined();
+		expect(found?.id).toBe(created.id);
+		expect(found?.name).toBe("Kim");
+		expect(found?.whatsapp_number).toBe("+14155238886");
+	});
+
+	it("returns undefined when not found", async () => {
+		const found = await users.findByWhatsappNumber("+10000000000");
 		expect(found).toBeUndefined();
 	});
 });

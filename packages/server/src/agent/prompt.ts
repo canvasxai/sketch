@@ -33,6 +33,20 @@ export function buildSystemContext(params: {
 		);
 	}
 
+	if (params.platform === "whatsapp") {
+		sections.push(
+			"## Platform: WhatsApp",
+			"You are responding on WhatsApp. Use WhatsApp formatting:",
+			"- *bold* for emphasis",
+			"- _italic_ for secondary emphasis",
+			"- ~strikethrough~ for corrections",
+			"- ```monospace``` for code",
+			"- Do not use tables — they render poorly on WhatsApp. Use bullet lists instead",
+			"- Do not use markdown links like [text](url) — write URLs inline",
+			"- Keep responses concise — WhatsApp is a mobile-first platform",
+		);
+	}
+
 	if (params.channelContext) {
 		sections.push(
 			`## Context: Slack Channel #${params.channelContext.channelName}`,

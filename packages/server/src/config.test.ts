@@ -161,11 +161,36 @@ describe("validateConfig", () => {
 	});
 
 	describe("Slack token validation", () => {
-		it("exits when Slack tokens are missing", () => {
+		it("does not exit when Slack tokens are missing (WhatsApp-only deployment)", () => {
 			const exitSpy = mockProcessExit();
 			const config = makeConfig({ ANTHROPIC_API_KEY: "sk-test" });
+			validateConfig(config);
+			expect(exitSpy).not.toHaveBeenCalled();
+		});
+
+		it("exits when SLACK_APP_TOKEN provided without SLACK_BOT_TOKEN", () => {
+			const exitSpy = mockProcessExit();
+			const config = makeConfig({ ANTHROPIC_API_KEY: "sk-test", SLACK_APP_TOKEN: "xapp-test" });
 			expect(() => validateConfig(config)).toThrow("exit");
 			expect(exitSpy).toHaveBeenCalledWith(1);
+		});
+
+		it("exits when SLACK_BOT_TOKEN provided without SLACK_APP_TOKEN", () => {
+			const exitSpy = mockProcessExit();
+			const config = makeConfig({ ANTHROPIC_API_KEY: "sk-test", SLACK_BOT_TOKEN: "xoxb-test" });
+			expect(() => validateConfig(config)).toThrow("exit");
+			expect(exitSpy).toHaveBeenCalledWith(1);
+		});
+
+		it("does not exit when both Slack tokens are provided", () => {
+			const exitSpy = mockProcessExit();
+			const config = makeConfig({
+				ANTHROPIC_API_KEY: "sk-test",
+				SLACK_APP_TOKEN: "xapp-test",
+				SLACK_BOT_TOKEN: "xoxb-test",
+			});
+			validateConfig(config);
+			expect(exitSpy).not.toHaveBeenCalled();
 		});
 	});
 
