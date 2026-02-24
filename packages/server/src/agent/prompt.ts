@@ -1,4 +1,3 @@
-import type { Attachment } from "../files";
 import { formatAttachmentsForPrompt } from "../files";
 import type { BufferedMessage } from "../slack/thread-buffer";
 
@@ -85,14 +84,13 @@ export function formatBufferedContext(
 	if (messages.length === 0) return currentMessage;
 
 	const lines: string[] = [header];
-	const allAttachments: Attachment[] = [];
 	for (const msg of messages) {
 		lines.push(`[${msg.userName}]: ${msg.text}`);
 		if (msg.attachments?.length) {
-			allAttachments.push(...msg.attachments);
+			lines.push(formatAttachmentsForPrompt(msg.attachments));
 		}
 	}
 
 	lines.push("", `[Current message from ${currentUserName}]`, currentMessage);
-	return lines.join("\n") + formatAttachmentsForPrompt(allAttachments);
+	return lines.join("\n");
 }

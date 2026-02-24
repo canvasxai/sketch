@@ -203,6 +203,11 @@ describe("formatBufferedContext", () => {
 		expect(result).toContain("<attachments>");
 		expect(result).toContain('name="report.pdf"');
 		expect(result).toContain('path="/ws/attachments/report.pdf"');
+
+		// Attachments should appear inline after the sender's message, before the current message
+		const attachIdx = result.indexOf("<attachments>");
+		const currentIdx = result.indexOf("[Current message from Alice]");
+		expect(attachIdx).toBeLessThan(currentIdx);
 	});
 
 	it("handles single buffered message", () => {
