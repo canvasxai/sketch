@@ -52,13 +52,14 @@ if (hasSlack) {
 		botToken: config.SLACK_BOT_TOKEN as string,
 		logger,
 	});
+	const slackBot = slack;
 
 	// DM handler
-	slack.onMessage(async (message) => {
+	slackBot.onMessage(async (message) => {
 		// Resolve or create user first — needed for queue key
 		let user = await users.findBySlackId(message.userId);
 		if (!user) {
-			const userInfo = await slack!.getUserInfo(message.userId);
+			const userInfo = await slackBot.getUserInfo(message.userId);
 			user = await users.create({
 				name: userInfo.realName,
 				slackUserId: message.userId,
@@ -114,7 +115,7 @@ if (hasSlack) {
 			}
 
 			// Post thinking indicator
-			const thinkingTs = await slack!.postMessage(message.channelId, "_Thinking..._");
+			const thinkingTs = await slackBot.postMessage(message.channelId, "_Thinking..._");
 
 			try {
 				const result = await runAgent({
@@ -128,26 +129,26 @@ if (hasSlack) {
 
 				for (const filePath of result.pendingUploads) {
 					try {
-						await slack!.uploadFile(message.channelId, filePath);
+						await slackBot.uploadFile(message.channelId, filePath);
 					} catch (err) {
 						logger.warn({ err, filePath }, "Failed to upload file to Slack");
 					}
 				}
 
-				await slack!.updateMessage(message.channelId, thinkingTs, result.text ?? "_No response_");
+				await slackBot.updateMessage(message.channelId, thinkingTs, result.text ?? "_No response_");
 			} catch (err) {
 				logger.error({ err, userId: user.id }, "Agent run failed");
-				await slack!.updateMessage(message.channelId, thinkingTs, "_Something went wrong, try again_");
+				await slackBot.updateMessage(message.channelId, thinkingTs, "_Something went wrong, try again_");
 			}
 		});
 	});
 
 	// Passive thread message handler
-	slack.onThreadMessage(async (message) => {
+	slackBot.onThreadMessage(async (message) => {
 		if (!message.threadTs) return;
 		if (!threadBuffer.hasThread(message.channelId, message.threadTs)) return;
 
-		const userInfo = await userCache.resolve(message.userId, (id) => slack!.getUserInfo(id));
+		const userInfo = await userCache.resolve(message.userId, (id) => slackBot.getUserInfo(id));
 
 		const downloadedAttachments: Attachment[] = [];
 		if (message.files?.length) {
@@ -184,7 +185,7 @@ if (hasSlack) {
 	});
 
 	// Channel mention handler
-	slack.onChannelMention(async (message) => {
+	slackBot.onChannelMention(async (message) => {
 		const threadTs = message.threadTs ?? message.ts;
 		const queue = queueManager.getQueue(`${message.channelId}:${threadTs}`);
 
@@ -193,7 +194,7 @@ if (hasSlack) {
 
 			let user = await users.findBySlackId(message.userId);
 			if (!user) {
-				const userInfo = await slack!.getUserInfo(message.userId);
+				const userInfo = await slackBot.getUserInfo(message.userId);
 				user = await users.create({
 					name: userInfo.realName,
 					slackUserId: message.userId,
@@ -203,7 +204,7 @@ if (hasSlack) {
 
 			let channel = await channels.findBySlackChannelId(message.channelId);
 			if (!channel) {
-				const channelInfo = await slack!.getChannelInfo(message.channelId);
+				const channelInfo = await slackBot.getChannelInfo(message.channelId);
 				channel = await channels.create({
 					slackChannelId: message.channelId,
 					name: channelInfo.name,
@@ -267,8 +268,8 @@ if (hasSlack) {
 				}
 			} else {
 				const history = message.threadTs
-					? await slack!.getThreadReplies(message.channelId, message.threadTs, config.SLACK_THREAD_HISTORY_LIMIT)
-					: await slack!.getChannelHistory(message.channelId, config.SLACK_CHANNEL_HISTORY_LIMIT);
+					? await slackBot.getThreadReplies(message.channelId, message.threadTs, config.SLACK_THREAD_HISTORY_LIMIT)
+					: await slackBot.getChannelHistory(message.channelId, config.SLACK_CHANNEL_HISTORY_LIMIT);
 
 				const filtered = history.filter((m) => m.ts !== message.ts);
 
@@ -279,7 +280,7 @@ if (hasSlack) {
 
 				const bootstrapMessages: BufferedMessage[] = [];
 				for (const msg of filtered.reverse()) {
-					const info = await userCache.resolve(msg.userId, (id) => slack!.getUserInfo(id));
+					const info = await userCache.resolve(msg.userId, (id) => slackBot.getUserInfo(id));
 					bootstrapMessages.push({ userName: info.realName, text: msg.text, ts: msg.ts });
 				}
 				if (bootstrapMessages.length > 0) {
@@ -290,7 +291,7 @@ if (hasSlack) {
 				}
 			}
 
-			const thinkingTs = await slack!.postThreadReply(message.channelId, threadTs, "_Thinking..._");
+			const thinkingTs = await slackBot.postThreadReply(message.channelId, threadTs, "_Thinking..._");
 
 			try {
 				const result = await runAgent({
@@ -309,16 +310,16 @@ if (hasSlack) {
 
 				for (const filePath of result.pendingUploads) {
 					try {
-						await slack!.uploadFile(message.channelId, filePath, threadTs);
+						await slackBot.uploadFile(message.channelId, filePath, threadTs);
 					} catch (err) {
 						logger.warn({ err, filePath }, "Failed to upload file to Slack");
 					}
 				}
 
-				await slack!.updateMessage(message.channelId, thinkingTs, result.text ?? "_No response_");
+				await slackBot.updateMessage(message.channelId, thinkingTs, result.text ?? "_No response_");
 			} catch (err) {
 				logger.error({ err, userId: user.id, channelId: message.channelId }, "Agent run failed");
-				await slack!.updateMessage(message.channelId, thinkingTs, "_Something went wrong, try again_");
+				await slackBot.updateMessage(message.channelId, thinkingTs, "_Something went wrong, try again_");
 			}
 		});
 	});
@@ -331,7 +332,10 @@ whatsapp.onMessage(async (message) => {
 	// Resolve user BEFORE enqueue — needed for queue key and access control
 	const user = await users.findByWhatsappNumber(message.phoneNumber);
 	if (!user) {
-		await whatsapp.sendText(message.jid, "Sorry, you're not authorized to use this bot. Contact your admin to get access.");
+		await whatsapp.sendText(
+			message.jid,
+			"Sorry, you're not authorized to use this bot. Contact your admin to get access.",
+		);
 		return;
 	}
 
