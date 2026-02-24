@@ -259,7 +259,7 @@ export class SlackBot {
 			channel_id: channelId,
 			file: content,
 			filename,
-			thread_ts: threadTs!,
+			...(threadTs ? { thread_ts: threadTs } : {}),
 		} as Parameters<typeof this.app.client.files.uploadV2>[0]);
 	}
 

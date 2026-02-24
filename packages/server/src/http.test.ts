@@ -77,7 +77,7 @@ describe("WhatsApp endpoints", () => {
 
 	describe("GET /whatsapp/pair", () => {
 		it("returns already_connected when bot is connected", async () => {
-			const whatsapp = makeMockWhatsApp({ isConnected: true } as any);
+			const whatsapp = makeMockWhatsApp({ isConnected: true } as Partial<WhatsAppBot>);
 			const app = createApp(db, { whatsapp });
 
 			const res = await app.request("/whatsapp/pair");
@@ -92,7 +92,7 @@ describe("WhatsApp endpoints", () => {
 				startPairing: async (onQr: (qr: string) => void) => {
 					onQr("test-qr-string-data");
 				},
-			} as any);
+			} as Partial<WhatsAppBot>);
 			const app = createApp(db, { whatsapp });
 
 			const res = await app.request("/whatsapp/pair");
@@ -106,7 +106,7 @@ describe("WhatsApp endpoints", () => {
 
 	describe("GET /whatsapp/status", () => {
 		it("returns connected false when bot is disconnected", async () => {
-			const whatsapp = makeMockWhatsApp({ isConnected: false } as any);
+			const whatsapp = makeMockWhatsApp({ isConnected: false } as Partial<WhatsAppBot>);
 			const app = createApp(db, { whatsapp });
 
 			const res = await app.request("/whatsapp/status");
@@ -117,7 +117,7 @@ describe("WhatsApp endpoints", () => {
 		});
 
 		it("returns connected true when bot is connected", async () => {
-			const whatsapp = makeMockWhatsApp({ isConnected: true } as any);
+			const whatsapp = makeMockWhatsApp({ isConnected: true } as Partial<WhatsAppBot>);
 			const app = createApp(db, { whatsapp });
 
 			const res = await app.request("/whatsapp/status");

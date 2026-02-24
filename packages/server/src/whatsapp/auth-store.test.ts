@@ -1,7 +1,7 @@
 import type { Kysely } from "kysely";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createTestDb } from "../test-utils";
 import type { DB } from "../db/schema";
+import { createTestDb } from "../test-utils";
 import { createDbAuthState } from "./auth-store";
 
 let db: Kysely<DB>;
@@ -34,7 +34,7 @@ describe("createDbAuthState", () => {
 		const { state, saveCreds } = await createDbAuthState(db);
 		await saveCreds();
 
-		(state.creds as any).registrationId = 99999;
+		Object.assign(state.creds, { registrationId: 99999 });
 		await saveCreds();
 
 		const { state: state2 } = await createDbAuthState(db);
@@ -43,9 +43,9 @@ describe("createDbAuthState", () => {
 
 	it("keys.set stores keys and keys.get retrieves them", async () => {
 		const { state } = await createDbAuthState(db);
-		await state.keys.set({ "pre-key": { "1": { keyPair: "test-data" } as any } });
+		await state.keys.set({ "pre-key": { "1": { keyPair: "test-data" } as never } });
 		const result = await state.keys.get("pre-key", ["1"]);
-		expect(result["1"]).toEqual({ keyPair: "test-data" } as any);
+		expect(result["1"]).toEqual({ keyPair: "test-data" } as never);
 	});
 
 	it("keys.get returns empty object for unknown ids", async () => {
@@ -56,7 +56,7 @@ describe("createDbAuthState", () => {
 
 	it("keys.set with null value deletes the key from DB", async () => {
 		const { state } = await createDbAuthState(db);
-		await state.keys.set({ "pre-key": { "1": { keyPair: "test" } as any } });
+		await state.keys.set({ "pre-key": { "1": { keyPair: "test" } as never } });
 		await state.keys.set({ "pre-key": { "1": null } });
 
 		// Create a fresh auth state to bypass the in-memory cache layer
@@ -69,8 +69,8 @@ describe("createDbAuthState", () => {
 	it("keys.set with multiple types stores each independently", async () => {
 		const { state } = await createDbAuthState(db);
 		await state.keys.set({
-			"pre-key": { "1": { data: "pk" } as any },
-			session: { "2": { data: "sess" } as any },
+			"pre-key": { "1": { data: "pk" } as never },
+			session: { "2": { data: "sess" } as never },
 		});
 		const pk = await state.keys.get("pre-key", ["1"]);
 		const sess = await state.keys.get("session", ["2"]);
@@ -81,7 +81,7 @@ describe("createDbAuthState", () => {
 	it("clearCreds removes all creds and keys", async () => {
 		const { state, saveCreds, clearCreds } = await createDbAuthState(db);
 		await saveCreds();
-		await state.keys.set({ "pre-key": { "1": { data: "test" } as any } });
+		await state.keys.set({ "pre-key": { "1": { data: "test" } as never } });
 		await clearCreds();
 
 		const { state: state2 } = await createDbAuthState(db);

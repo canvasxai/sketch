@@ -16,10 +16,11 @@ export function createApp(db: Kysely<DB>, deps?: { whatsapp?: WhatsAppBot }) {
 	});
 
 	if (deps?.whatsapp) {
+		const whatsapp = deps.whatsapp;
 		let pairingInProgress = false;
 
 		app.get("/whatsapp/pair", async (c) => {
-			if (deps.whatsapp!.isConnected) {
+			if (whatsapp.isConnected) {
 				return c.json({ status: "already_connected" });
 			}
 			if (pairingInProgress) {
@@ -37,7 +38,7 @@ export function createApp(db: Kysely<DB>, deps?: { whatsapp?: WhatsAppBot }) {
 					}
 				}, 30000);
 
-				deps.whatsapp!
+				whatsapp
 					.startPairing((qr) => {
 						if (!responded) {
 							responded = true;
@@ -53,7 +54,7 @@ export function createApp(db: Kysely<DB>, deps?: { whatsapp?: WhatsAppBot }) {
 		});
 
 		app.get("/whatsapp/status", (c) => {
-			return c.json({ connected: deps.whatsapp!.isConnected });
+			return c.json({ connected: whatsapp.isConnected });
 		});
 	}
 

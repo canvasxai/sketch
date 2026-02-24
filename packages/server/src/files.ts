@@ -12,7 +12,7 @@
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { downloadMediaMessage, getContentType, type WASocket, type proto } from "@whiskeysockets/baileys";
+import { type WASocket, downloadMediaMessage, getContentType, type proto } from "@whiskeysockets/baileys";
 import type { Logger } from "./logger";
 
 export interface Attachment {
@@ -201,17 +201,24 @@ export async function downloadWhatsAppMedia(
 ): Promise<Attachment> {
 	await mkdir(destDir, { recursive: true });
 
-	const buffer = await downloadMediaMessage(msg as Parameters<typeof downloadMediaMessage>[0], "buffer", {}, {
-		reuploadRequest: sock.updateMediaMessage,
-		logger: logger as any,
-	});
+	const buffer = await downloadMediaMessage(
+		msg as Parameters<typeof downloadMediaMessage>[0],
+		"buffer",
+		{},
+		{
+			reuploadRequest: sock.updateMediaMessage,
+			logger: logger as never,
+		},
+	);
 
 	if (buffer.length > maxSizeBytes) {
 		throw new Error(`File exceeds ${Math.round(maxSizeBytes / (1024 * 1024))}MB limit`);
 	}
 
-	const messageType = getContentType(msg.message!);
-	const mediaMsg = msg.message![messageType as keyof typeof msg.message] as any;
+	const messageType = getContentType(msg.message ?? undefined);
+	const mediaMsg = msg.message?.[messageType as keyof typeof msg.message] as
+		| { mimetype?: string; fileName?: string }
+		| undefined;
 	const mimeType: string = mediaMsg?.mimetype ?? "application/octet-stream";
 	const originalName: string = mediaMsg?.fileName ?? `${Date.now()}.${mimeToExtension(mimeType)}`;
 
@@ -221,7 +228,10 @@ export async function downloadWhatsAppMedia(
 
 	await writeFile(localPath, buffer);
 
-	logger?.debug({ originalName: sanitized, mimeType, sizeBytes: buffer.length, localPath }, "WhatsApp media downloaded");
+	logger?.debug(
+		{ originalName: sanitized, mimeType, sizeBytes: buffer.length, localPath },
+		"WhatsApp media downloaded",
+	);
 
 	return {
 		originalName: sanitized,

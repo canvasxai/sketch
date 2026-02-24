@@ -1,6 +1,6 @@
+import type { proto } from "@whiskeysockets/baileys";
 import { describe, expect, it } from "vitest";
 import { extractText, hasMediaContent, jidToPhoneNumber } from "./bot";
-import type { proto } from "@whiskeysockets/baileys";
 
 describe("extractText", () => {
 	it("returns text from conversation field", () => {

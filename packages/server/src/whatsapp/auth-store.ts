@@ -1,9 +1,9 @@
 import {
-	initAuthCreds,
-	makeCacheableSignalKeyStore,
 	type AuthenticationCreds,
 	type AuthenticationState,
 	type SignalDataTypeMap,
+	initAuthCreds,
+	makeCacheableSignalKeyStore,
 } from "@whiskeysockets/baileys";
 import type { Kysely } from "kysely";
 import type { DB } from "../db/schema";
@@ -29,11 +29,7 @@ export async function createDbAuthState(
 
 	const saveCreds = async () => {
 		const json = JSON.stringify(creds);
-		const existing = await db
-			.selectFrom("whatsapp_creds")
-			.select("id")
-			.where("id", "=", "default")
-			.executeTakeFirst();
+		const existing = await db.selectFrom("whatsapp_creds").select("id").where("id", "=", "default").executeTakeFirst();
 		if (existing) {
 			await db.updateTable("whatsapp_creds").set({ creds: json }).where("id", "=", "default").execute();
 		} else {
@@ -90,7 +86,7 @@ export async function createDbAuthState(
 				}
 			},
 		},
-		logger as any,
+		logger as unknown as Parameters<typeof makeCacheableSignalKeyStore>[1],
 	);
 
 	return {

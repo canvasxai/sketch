@@ -340,9 +340,11 @@ whatsapp.onMessage(async (message) => {
 
 	queue.enqueue(async () => {
 		const workspaceDir = await ensureWorkspace(config, user.id);
+		const msgKey = message.rawMessage.key;
+		if (!msgKey) return;
 
 		// Thinking indicator
-		await whatsapp.reactThinking(message.jid, message.rawMessage.key!);
+		await whatsapp.reactThinking(message.jid, msgKey);
 		await whatsapp.sendComposing(message.jid);
 
 		try {
@@ -375,7 +377,7 @@ whatsapp.onMessage(async (message) => {
 
 			// Remove thinking reaction
 			if (whatsapp.isConnected) {
-				await whatsapp.removeReaction(message.jid, message.rawMessage.key!);
+				await whatsapp.removeReaction(message.jid, msgKey);
 			}
 
 			// Upload pending files
@@ -398,7 +400,7 @@ whatsapp.onMessage(async (message) => {
 		} catch (err) {
 			logger.error({ err, userId: user.id }, "Agent run failed (WhatsApp)");
 			if (whatsapp.isConnected) {
-				await whatsapp.removeReaction(message.jid, message.rawMessage.key!);
+				await whatsapp.removeReaction(message.jid, msgKey);
 				await whatsapp.sendText(message.jid, "Something went wrong, try again.");
 			}
 		}

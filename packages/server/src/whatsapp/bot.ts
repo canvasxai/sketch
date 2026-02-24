@@ -1,3 +1,4 @@
+import type { Boom } from "@hapi/boom";
 /**
  * WhatsApp adapter using Baileys — connection management, message handling,
  * reconnection with exponential backoff, thinking indicators, echo detection.
@@ -7,14 +8,13 @@
  */
 import {
 	DisconnectReason,
-	WAVersion,
+	type WASocket,
+	type WAVersion,
 	fetchLatestBaileysVersion,
 	getContentType,
 	makeWASocket,
-	type WASocket,
 	type proto,
 } from "@whiskeysockets/baileys";
-import { Boom } from "@hapi/boom";
 import type { Kysely } from "kysely";
 import type { DB } from "../db/schema";
 import type { Logger } from "../logger";
@@ -82,11 +82,7 @@ export class WhatsAppBot {
 	 * Returns true if connected, false if waiting for pairing.
 	 */
 	async start(): Promise<boolean> {
-		const row = await this.db
-			.selectFrom("whatsapp_creds")
-			.select("id")
-			.where("id", "=", "default")
-			.executeTakeFirst();
+		const row = await this.db.selectFrom("whatsapp_creds").select("id").where("id", "=", "default").executeTakeFirst();
 
 		if (!row) {
 			this.logger.info("No WhatsApp creds in DB — waiting for pairing");
@@ -117,7 +113,7 @@ export class WhatsAppBot {
 				creds: authState.state.creds,
 				keys: authState.state.keys,
 			},
-			logger: this.logger as any,
+			logger: this.logger as unknown as Parameters<typeof makeWASocket>[0]["logger"],
 			printQRInTerminal: false,
 			syncFullHistory: false,
 			markOnlineOnConnect: false,
@@ -247,7 +243,7 @@ export class WhatsAppBot {
 				creds: authState.state.creds,
 				keys: authState.state.keys,
 			},
-			logger: this.logger as any,
+			logger: this.logger as unknown as Parameters<typeof makeWASocket>[0]["logger"],
 			printQRInTerminal: false,
 			syncFullHistory: false,
 			markOnlineOnConnect: false,
@@ -260,7 +256,7 @@ export class WhatsAppBot {
 	}
 
 	private registerConnectionHandler(authState: Awaited<ReturnType<typeof createDbAuthState>>): void {
-		this.sock!.ev.on("connection.update", async (update) => {
+		this.sock?.ev.on("connection.update", async (update) => {
 			const { connection, lastDisconnect } = update;
 
 			if (connection === "open") {
@@ -291,7 +287,7 @@ export class WhatsAppBot {
 	}
 
 	private registerMessageHandler(): void {
-		this.sock!.ev.on("messages.upsert", async ({ messages, type }) => {
+		this.sock?.ev.on("messages.upsert", async ({ messages, type }) => {
 			if (type !== "notify") return;
 
 			for (const msg of messages) {
@@ -317,10 +313,10 @@ export class WhatsAppBot {
 						text: text ?? "",
 						phoneNumber,
 						jid,
-						messageId: msg.key.id!,
+						messageId: msg.key.id ?? "",
 						pushName: msg.pushName ?? "Unknown",
 						rawMessage: msg,
-						mediaType: hasMedia ? messageType ?? undefined : undefined,
+						mediaType: hasMedia ? (messageType ?? undefined) : undefined,
 					});
 				}
 			}
