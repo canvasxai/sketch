@@ -41,12 +41,15 @@ sketch/
       logger.ts         → pino logger factory
       http.ts           → Hono app with /health
       queue.ts          → per-channel in-memory message queue
-      slack/bot.ts      → Slack Bolt adapter (Socket Mode, DMs)
+      slack/
+        bot.ts            → Slack Bolt adapter (Socket Mode, DMs, mentions, passive thread listener)
+        thread-buffer.ts  → in-memory thread message buffer for context between @mentions
+        user-cache.ts     → in-memory cache for Slack getUserInfo lookups
       agent/
         runner.ts       → runAgent() — Claude Agent SDK query() with canUseTool
-        prompt.ts       → buildSystemContext() for platform rules + isolation
+        prompt.ts       → buildSystemContext() + formatBufferedContext() for prompts
         workspace.ts    → ensureWorkspace() creates user dirs
-        sessions.ts     → session ID persistence for resume
+        sessions.ts     → session ID persistence (per-workspace or per-thread)
       db/
         index.ts        → createDatabase() with SQLite + WAL
         schema.ts       → DB type interface (users table)
@@ -65,14 +68,14 @@ sketch/
 - zod + dotenv for config validation (`import "dotenv/config"`, .env at repo root)
 - Kysely migrations run at app startup (static imports, not FileMigrationProvider)
 - No unnecessary inline comments — prefer docstrings explaining decisions
-- Vitest for testing (not yet set up)
+- Vitest for testing
 - Run `pnpm dev` from repo root — tsx watches `packages/server/src/index.ts`
 
 ## Key Design Decisions
 
 - Platform formatting via system prompt only, no post-processing
 - Three-layer prompt: Claude Code preset → user's CLAUDE.md in workspace → platform/org context via `systemPrompt.append`
-- Per-user workspace at `data/workspaces/{user_id}/` with session.json
+- Per-user workspace at `data/workspaces/{user_id}/` with session.json; per-channel workspace at `data/workspaces/channel-{id}/` with per-thread sessions at `sessions/{threadTs}.json`
 - `canUseTool` validates all tool calls: file tools check path within workspace, Bash checks for absolute paths outside workspace, non-permitted tools denied
 - `permissionMode: "default"` with no `allowedTools` — ensures `canUseTool` is always called (`allowedTools` bypasses `canUseTool`)
 - In-memory per-channel message queue (sequential processing, one agent run at a time per channel)

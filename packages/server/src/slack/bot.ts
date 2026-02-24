@@ -1,7 +1,14 @@
 /**
  * Slack adapter wrapping @slack/bolt in Socket Mode.
- * Handles DMs via message event and channel @mentions via app_mention event.
- * Bot self-ID resolved at startup via auth.test for mention stripping.
+ *
+ * Three event paths:
+ * - DMs: `message` event with channel_type "im" → onMessage handler
+ * - Channel @mentions: `app_mention` event → onChannelMention handler
+ * - Passive thread messages: `message` event with thread_ts in a channel →
+ *   onThreadMessage handler (buffered for context, no agent run)
+ *
+ * Bot self-ID resolved at startup via auth.test. Used for mention stripping
+ * and to filter out our own messages while letting other bots' messages through.
  */
 import { App } from "@slack/bolt";
 import type { Logger } from "../logger.js";
@@ -18,29 +25,12 @@ export interface SlackMessage {
 	userId: string;
 	channelId: string;
 	ts: string;
-	type: "dm" | "channel_mention";
+	type: "dm" | "channel_mention" | "thread_message";
 	threadTs?: string;
 	files?: SlackFile[];
 }
 
 export type SlackMessageHandler = (message: SlackMessage) => Promise<void>;
-
-/**
- * Determines whether to fetch thread replies or channel history based on
- * whether the mention is inside a thread.
- */
-export function resolveHistoryParams(
-	message: SlackMessage,
-	channelLimit: number,
-	threadLimit: number,
-):
-	| { source: "thread"; channelId: string; threadTs: string; limit: number }
-	| { source: "channel"; channelId: string; limit: number } {
-	if (message.threadTs) {
-		return { source: "thread", channelId: message.channelId, threadTs: message.threadTs, limit: threadLimit };
-	}
-	return { source: "channel", channelId: message.channelId, limit: channelLimit };
-}
 
 export interface SlackBotConfig {
 	appToken: string;
@@ -53,6 +43,7 @@ export class SlackBot {
 	private logger: Logger;
 	private handler: SlackMessageHandler | null = null;
 	private mentionHandler: SlackMessageHandler | null = null;
+	private threadMessageHandler: SlackMessageHandler | null = null;
 	private botUserId: string | null = null;
 
 	constructor(config: SlackBotConfig) {
@@ -79,35 +70,68 @@ export class SlackBot {
 		this.mentionHandler = handler;
 	}
 
+	onThreadMessage(handler: SlackMessageHandler): void {
+		this.threadMessageHandler = handler;
+	}
+
 	async start(): Promise<void> {
 		const auth = await this.app.client.auth.test();
 		this.botUserId = auth.user_id ?? null;
 		this.logger.info({ botUserId: this.botUserId }, "Resolved bot user ID");
 
 		this.app.message(async ({ message }) => {
-			if ("bot_id" in message && message.bot_id) return;
-			if (!("channel_type" in message) || message.channel_type !== "im") return;
 			if (!("user" in message) || !message.user) return;
+			if (message.user === this.botUserId) return;
 
-			const hasText = "text" in message && message.text;
-			const rawFiles = "files" in message && Array.isArray(message.files) ? message.files : [];
-			const hasFiles = rawFiles.length > 0;
-			if (!hasText && !hasFiles) return;
+			const isIm = "channel_type" in message && message.channel_type === "im";
+			const threadTs = "thread_ts" in message ? (message.thread_ts as string) : undefined;
 
-			const files: SlackFile[] = rawFiles.map((f: Record<string, unknown>) => ({
-				name: (f.name as string) || "file",
-				urlPrivate: (f.url_private_download as string) || (f.url_private as string) || "",
-				mimetype: (f.mimetype as string) || "application/octet-stream",
-				size: (f.size as number) || 0,
-			}));
+			if (isIm) {
+				if (!this.handler) return;
 
-			if (this.handler) {
+				const hasText = "text" in message && message.text;
+				const rawFiles = "files" in message && Array.isArray(message.files) ? message.files : [];
+				const hasFiles = rawFiles.length > 0;
+				if (!hasText && !hasFiles) return;
+
+				const files: SlackFile[] = rawFiles.map((f: Record<string, unknown>) => ({
+					name: (f.name as string) || "file",
+					urlPrivate: (f.url_private_download as string) || (f.url_private as string) || "",
+					mimetype: (f.mimetype as string) || "application/octet-stream",
+					size: (f.size as number) || 0,
+				}));
+
 				await this.handler({
 					type: "dm",
 					text: hasText ? (message as { text: string }).text : "",
 					userId: message.user,
 					channelId: message.channel,
 					ts: message.ts,
+					...(files.length > 0 && { files }),
+				});
+				return;
+			}
+
+			if (threadTs && this.threadMessageHandler) {
+				const hasText = "text" in message && message.text;
+				const rawFiles = "files" in message && Array.isArray(message.files) ? message.files : [];
+				const hasFiles = rawFiles.length > 0;
+				if (!hasText && !hasFiles) return;
+
+				const files: SlackFile[] = rawFiles.map((f: Record<string, unknown>) => ({
+					name: (f.name as string) || "file",
+					urlPrivate: (f.url_private_download as string) || (f.url_private as string) || "",
+					mimetype: (f.mimetype as string) || "application/octet-stream",
+					size: (f.size as number) || 0,
+				}));
+
+				await this.threadMessageHandler({
+					type: "thread_message",
+					text: hasText ? (message as { text: string }).text : "",
+					userId: message.user,
+					channelId: message.channel,
+					ts: message.ts,
+					threadTs,
 					...(files.length > 0 && { files }),
 				});
 			}
@@ -194,7 +218,7 @@ export class SlackBot {
 	async getChannelHistory(channelId: string, limit = 5): Promise<Array<{ userId: string; text: string; ts: string }>> {
 		const result = await this.app.client.conversations.history({ channel: channelId, limit });
 		return (result.messages ?? [])
-			.filter((m) => m.text && m.user && !m.bot_id)
+			.filter((m) => m.text && m.user)
 			.map((m) => ({
 				userId: m.user as string,
 				text: m.text as string,
@@ -209,7 +233,7 @@ export class SlackBot {
 	): Promise<Array<{ userId: string; text: string; ts: string }>> {
 		const result = await this.app.client.conversations.replies({ channel: channelId, ts: threadTs, limit });
 		return (result.messages ?? [])
-			.filter((m) => m.text && m.user && !m.bot_id)
+			.filter((m) => m.text && m.user)
 			.map((m) => ({
 				userId: m.user as string,
 				text: m.text as string,

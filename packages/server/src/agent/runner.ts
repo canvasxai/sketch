@@ -30,6 +30,7 @@ export interface RunAgentParams {
 	userName: string;
 	logger: Logger;
 	attachments?: Attachment[];
+	threadTs?: string;
 	channelContext?: {
 		channelName: string;
 		recentMessages: Array<{ userName: string; text: string }>;
@@ -38,7 +39,7 @@ export interface RunAgentParams {
 
 export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
 	const { userMessage, workspaceDir, userName, logger } = params;
-	const existingSessionId = await getSessionId(workspaceDir);
+	const existingSessionId = await getSessionId(workspaceDir, params.threadTs);
 	const absWorkspace = resolve(workspaceDir);
 
 	const systemAppend = buildSystemContext({
@@ -101,7 +102,7 @@ export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
 			permissionMode: "default" as const,
 			allowDangerouslySkipPermissions: false,
 			settingSources: ["project", "user"],
-			mcpServers: { "sketch": uploadServer },
+			mcpServers: { sketch: uploadServer },
 			stderr: (data) => {
 				logger.debug({ stderr: data.trim() }, "Agent subprocess");
 			},
@@ -124,7 +125,7 @@ export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
 	}
 
 	if (sessionId) {
-		await saveSessionId(workspaceDir, sessionId);
+		await saveSessionId(workspaceDir, sessionId, params.threadTs);
 	}
 
 	const pendingUploads = uploadCollector.drain();

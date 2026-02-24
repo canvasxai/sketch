@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SlackBot, resolveHistoryParams } from "./bot";
-import type { SlackMessage } from "./bot";
+import { SlackBot } from "./bot";
 
 describe("SlackBot.stripBotMention", () => {
 	const botId = "U123BOT";
@@ -27,43 +26,5 @@ describe("SlackBot.stripBotMention", () => {
 
 	it("does not strip mentions of other users", () => {
 		expect(SlackBot.stripBotMention("<@U999OTHER> hello", botId)).toBe("<@U999OTHER> hello");
-	});
-});
-
-describe("resolveHistoryParams", () => {
-	const baseMessage: SlackMessage = {
-		text: "hello",
-		userId: "U001",
-		channelId: "C001",
-		ts: "1234.5678",
-		type: "channel_mention",
-	};
-
-	it("returns channel source when no threadTs", () => {
-		const result = resolveHistoryParams(baseMessage, 5, 50);
-		expect(result.source).toBe("channel");
-		expect(result.channelId).toBe("C001");
-		expect(result.limit).toBe(5);
-		expect("threadTs" in result).toBe(false);
-	});
-
-	it("returns thread source when threadTs is present", () => {
-		const result = resolveHistoryParams({ ...baseMessage, threadTs: "1111.2222" }, 5, 50);
-		expect(result.source).toBe("thread");
-		expect(result.channelId).toBe("C001");
-		expect(result.limit).toBe(50);
-		if (result.source === "thread") {
-			expect(result.threadTs).toBe("1111.2222");
-		}
-	});
-
-	it("uses provided channel limit for channel source", () => {
-		const result = resolveHistoryParams(baseMessage, 10, 100);
-		expect(result.limit).toBe(10);
-	});
-
-	it("uses provided thread limit for thread source", () => {
-		const result = resolveHistoryParams({ ...baseMessage, threadTs: "1111.2222" }, 10, 100);
-		expect(result.limit).toBe(100);
 	});
 });

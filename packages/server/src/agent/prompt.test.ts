@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSystemContext } from "./prompt";
+import { buildSystemContext, formatBufferedContext } from "./prompt";
 
 describe("buildSystemContext", () => {
 	describe("slack platform (DM)", () => {
@@ -158,5 +158,84 @@ describe("buildSystemContext", () => {
 		it("omits recent messages section when array is empty", () => {
 			expect(result).not.toContain("## Recent Channel Messages");
 		});
+	});
+});
+
+describe("formatBufferedContext", () => {
+	it("returns just the current message when buffer is empty", () => {
+		const result = formatBufferedContext([], "Alice", "what do you think?");
+		expect(result).toBe("what do you think?");
+	});
+
+	it("prepends buffered messages with header", () => {
+		const messages = [
+			{ userName: "Bob", text: "I like option A", ts: "1111.0001" },
+			{ userName: "Carol", text: "Me too", ts: "1111.0002" },
+		];
+		const result = formatBufferedContext(messages, "Alice", "what do you think?");
+
+		expect(result).toContain("[Messages in this thread since your last response]");
+		expect(result).toContain("[Bob]: I like option A");
+		expect(result).toContain("[Carol]: Me too");
+		expect(result).toContain("[Current message from Alice]");
+		expect(result).toContain("what do you think?");
+	});
+
+	it("includes XML attachment tags for messages with files", () => {
+		const messages = [
+			{
+				userName: "Bob",
+				text: "here's the report",
+				ts: "1111.0001",
+				attachments: [
+					{
+						originalName: "report.pdf",
+						mimeType: "application/pdf",
+						localPath: "/ws/attachments/report.pdf",
+						sizeBytes: 2048,
+					},
+				],
+			},
+		];
+		const result = formatBufferedContext(messages, "Alice", "looks good?");
+
+		expect(result).toContain("[Bob]: here's the report");
+		expect(result).toContain("<attachments>");
+		expect(result).toContain('name="report.pdf"');
+		expect(result).toContain('path="/ws/attachments/report.pdf"');
+	});
+
+	it("handles single buffered message", () => {
+		const messages = [{ userName: "Bob", text: "quick update", ts: "1111.0001" }];
+		const result = formatBufferedContext(messages, "Alice", "thanks");
+
+		expect(result).toContain("[Bob]: quick update");
+		expect(result).toContain("[Current message from Alice]");
+		expect(result).toContain("thanks");
+	});
+
+	it("uses custom header when provided", () => {
+		const messages = [{ userName: "Bob", text: "hey there", ts: "1111.0001" }];
+		const result = formatBufferedContext(messages, "Alice", "hello", "[Thread context before you joined]");
+
+		expect(result).toContain("[Thread context before you joined]");
+		expect(result).not.toContain("[Messages in this thread since your last response]");
+	});
+
+	it("preserves message order", () => {
+		const messages = [
+			{ userName: "Alice", text: "first", ts: "1111.0001" },
+			{ userName: "Bob", text: "second", ts: "1111.0002" },
+			{ userName: "Carol", text: "third", ts: "1111.0003" },
+		];
+		const result = formatBufferedContext(messages, "Dave", "fourth");
+
+		const firstIdx = result.indexOf("[Alice]: first");
+		const secondIdx = result.indexOf("[Bob]: second");
+		const thirdIdx = result.indexOf("[Carol]: third");
+		const fourthIdx = result.indexOf("fourth");
+		expect(firstIdx).toBeLessThan(secondIdx);
+		expect(secondIdx).toBeLessThan(thirdIdx);
+		expect(thirdIdx).toBeLessThan(fourthIdx);
 	});
 });

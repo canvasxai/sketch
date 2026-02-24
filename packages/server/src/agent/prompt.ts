@@ -1,3 +1,7 @@
+import type { Attachment } from "../files";
+import { formatAttachmentsForPrompt } from "../files";
+import type { BufferedMessage } from "../slack/thread-buffer";
+
 /**
  * Build the system context appended to the Claude Code preset.
  * Contains platform formatting rules, user metadata, and optional channel context.
@@ -64,4 +68,31 @@ export function buildSystemContext(params: {
 	}
 
 	return sections.join("\n");
+}
+
+/**
+ * Formats buffered thread messages into a prompt that prepends context to
+ * the user's current message. Used on subsequent @mentions in a thread where
+ * the SDK session already has prior conversation — the buffer contains only
+ * messages from other users/bots since the bot's last response.
+ */
+export function formatBufferedContext(
+	messages: BufferedMessage[],
+	currentUserName: string,
+	currentMessage: string,
+	header = "[Messages in this thread since your last response]",
+): string {
+	if (messages.length === 0) return currentMessage;
+
+	const lines: string[] = [header];
+	const allAttachments: Attachment[] = [];
+	for (const msg of messages) {
+		lines.push(`[${msg.userName}]: ${msg.text}`);
+		if (msg.attachments?.length) {
+			allAttachments.push(...msg.attachments);
+		}
+	}
+
+	lines.push("", `[Current message from ${currentUserName}]`, currentMessage);
+	return lines.join("\n") + formatAttachmentsForPrompt(allAttachments);
 }
