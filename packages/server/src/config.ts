@@ -31,6 +31,10 @@ export const configSchema = z.object({
 	// Files
 	MAX_FILE_SIZE_MB: z.coerce.number().default(20),
 
+	// Admin auth
+	ADMIN_EMAIL: z.string().email().optional(),
+	ADMIN_PASSWORD: z.string().min(8).optional(),
+
 	// Server
 	DATA_DIR: z.string().default("./data"),
 	PORT: z.coerce.number().default(3000),
@@ -78,6 +82,16 @@ export function validateConfig(config: Config): void {
 
 	if (config.DB_TYPE === "postgres" && !config.DATABASE_URL) {
 		console.error("DB_TYPE=postgres requires DATABASE_URL");
+		process.exit(1);
+	}
+
+	// Admin auth: both or neither
+	if (config.ADMIN_EMAIL && !config.ADMIN_PASSWORD) {
+		console.error("ADMIN_EMAIL provided without ADMIN_PASSWORD");
+		process.exit(1);
+	}
+	if (config.ADMIN_PASSWORD && !config.ADMIN_EMAIL) {
+		console.error("ADMIN_PASSWORD provided without ADMIN_EMAIL");
 		process.exit(1);
 	}
 }

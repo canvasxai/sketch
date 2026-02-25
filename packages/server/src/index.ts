@@ -411,8 +411,8 @@ whatsapp.onMessage(async (message) => {
 	});
 });
 
-// 9. HTTP server — after WhatsApp instantiation so pairing endpoint has a reference
-const app = createApp(db, { whatsapp });
+// 9. HTTP server — after bot instantiation so pairing endpoint has a reference
+const app = createApp(db, config, { whatsapp, slack: slack ?? undefined });
 const server = serve({ fetch: app.fetch, port: config.PORT });
 logger.info({ port: config.PORT }, "HTTP server started");
 
@@ -426,11 +426,11 @@ const whatsappConnected = await whatsapp.start();
 if (whatsappConnected) {
 	logger.info("WhatsApp connected");
 } else {
-	logger.info("WhatsApp not paired — use GET /whatsapp/pair to connect");
+	logger.info("WhatsApp not paired — use GET /api/whatsapp/pair to connect");
 }
 
 if (!hasSlack && !whatsappConnected) {
-	logger.info("No channels active — pair WhatsApp via GET /whatsapp/pair or configure Slack tokens");
+	logger.info("No channels active — pair WhatsApp via GET /api/whatsapp/pair or configure Slack tokens");
 }
 
 // 11. Graceful shutdown

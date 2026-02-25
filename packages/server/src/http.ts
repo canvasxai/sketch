@@ -1,60 +1,57 @@
+/**
+ * HTTP app factory — API routes, auth middleware, static file serving.
+ * Route registration order: API routes → static assets → SPA catch-all.
+ */
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import type { Kysely } from "kysely";
+import { authRoutes } from "./api/auth";
+import { channelRoutes } from "./api/channels";
+import { healthRoutes } from "./api/health";
+import { createAuthMiddleware } from "./api/middleware";
+import { whatsappRoutes } from "./api/whatsapp";
+import type { Config } from "./config";
 import type { DB } from "./db/schema";
+import type { SlackBot } from "./slack/bot";
 import type { WhatsAppBot } from "./whatsapp/bot";
 
-export function createApp(db: Kysely<DB>, deps?: { whatsapp?: WhatsAppBot }) {
+interface AppDeps {
+	whatsapp?: WhatsAppBot;
+	slack?: SlackBot;
+}
+
+export function createApp(db: Kysely<DB>, config: Config, deps?: AppDeps) {
 	const app = new Hono();
 
-	app.get("/health", async (c) => {
-		try {
-			await db.selectFrom("users").select("id").limit(1).execute();
-			return c.json({ status: "ok", db: "ok", uptime: process.uptime() });
-		} catch {
-			return c.json({ status: "error", db: "error" }, 500);
-		}
-	});
+	// Auth middleware on all /api/* routes (with exemptions for public paths)
+	app.use("/api/*", createAuthMiddleware(config));
+
+	// API routes
+	app.route("/api/health", healthRoutes(db));
+	app.route("/api/auth", authRoutes(config));
+	app.route("/api/channels", channelRoutes({ whatsapp: deps?.whatsapp, slack: deps?.slack }));
 
 	if (deps?.whatsapp) {
-		const whatsapp = deps.whatsapp;
-		let pairingInProgress = false;
+		app.route("/api/whatsapp", whatsappRoutes(deps.whatsapp));
+	}
 
-		app.get("/whatsapp/pair", async (c) => {
-			if (whatsapp.isConnected) {
-				return c.json({ status: "already_connected" });
+	// Static file serving for the SPA (production only — dev uses Vite dev server)
+	// Resolve path relative to this file's location (works with both tsx and tsdown bundle)
+	const webDistDir = resolve(import.meta.dirname, "../../web/dist");
+
+	if (existsSync(webDistDir)) {
+		// Serve hashed assets (JS, CSS, images)
+		app.use("/assets/*", serveStatic({ root: webDistDir }));
+
+		// SPA catch-all: any non-API route returns index.html for client-side routing
+		const indexHtml = readFileSync(join(webDistDir, "index.html"), "utf-8");
+		app.get("*", (c) => {
+			if (c.req.path.startsWith("/api/")) {
+				return c.json({ error: { code: "NOT_FOUND", message: "Not found" } }, 404);
 			}
-			if (pairingInProgress) {
-				return c.json({ status: "pairing_in_progress", message: "A pairing attempt is already active" }, 409);
-			}
-			pairingInProgress = true;
-
-			return new Promise<Response>((resolve) => {
-				let responded = false;
-				const timeout = setTimeout(() => {
-					if (!responded) {
-						responded = true;
-						pairingInProgress = false;
-						resolve(c.json({ status: "timeout", message: "No QR generated within 30s" }, 408));
-					}
-				}, 30000);
-
-				whatsapp
-					.startPairing((qr) => {
-						if (!responded) {
-							responded = true;
-							clearTimeout(timeout);
-							pairingInProgress = false;
-							resolve(c.json({ status: "pairing", qr }));
-						}
-					})
-					.catch(() => {
-						pairingInProgress = false;
-					});
-			});
-		});
-
-		app.get("/whatsapp/status", (c) => {
-			return c.json({ connected: whatsapp.isConnected });
+			return c.html(indexHtml);
 		});
 	}
 
