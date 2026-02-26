@@ -46,12 +46,7 @@ export function ProgressIndicator({ currentStep }: ProgressIndicatorProps) {
 							</span>
 						</div>
 						{i < steps.length - 1 && (
-							<div
-								className={cn(
-									"h-px w-4 sm:w-8",
-									currentStep > step.number ? "bg-primary/30" : "bg-border",
-								)}
-							/>
+							<div className={cn("h-px w-4 sm:w-8", currentStep > step.number ? "bg-primary/30" : "bg-border")} />
 						)}
 					</div>
 				);
@@ -59,4 +54,3 @@ export function ProgressIndicator({ currentStep }: ProgressIndicatorProps) {
 		</div>
 	);
 }
-

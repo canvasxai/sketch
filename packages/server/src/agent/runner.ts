@@ -33,6 +33,8 @@ export interface RunAgentParams {
 	onMessage: (text: string) => Promise<void>;
 	attachments?: Attachment[];
 	threadTs?: string;
+	orgName?: string | null;
+	botName?: string | null;
 	channelContext?: {
 		channelName: string;
 		recentMessages: Array<{ userName: string; text: string }>;
@@ -73,6 +75,8 @@ export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
 		platform: params.platform,
 		userName,
 		workspaceDir: absWorkspace,
+		orgName: params.orgName,
+		botName: params.botName,
 		channelContext: params.channelContext,
 	});
 

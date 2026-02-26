@@ -41,6 +41,28 @@ export const api = {
 				body: JSON.stringify({ email, password }),
 			});
 		},
+		identity(orgName: string, botName: string) {
+			return request<{ success: boolean }>("/api/setup/identity", {
+				method: "POST",
+				body: JSON.stringify({ orgName, botName }),
+			});
+		},
+		slack(botToken: string, appToken: string) {
+			return request<{ success: boolean }>("/api/setup/slack", {
+				method: "POST",
+				body: JSON.stringify({ botToken, appToken }),
+			});
+		},
+		llm(
+			data:
+				| { provider: "anthropic"; apiKey: string }
+				| { provider: "bedrock"; awsAccessKeyId: string; awsSecretAccessKey: string; awsRegion: string },
+		) {
+			return request<{ success: boolean }>("/api/setup/llm", {
+				method: "POST",
+				body: JSON.stringify(data),
+			});
+		},
 	},
 	auth: {
 		login(email: string, password: string) {
@@ -59,6 +81,11 @@ export const api = {
 	channels: {
 		status() {
 			return request<{ channels: ChannelStatus[] }>("/api/channels/status");
+		},
+	},
+	settings: {
+		identity() {
+			return request<{ orgName: string | null; botName: string }>("/api/settings/identity");
 		},
 	},
 };

@@ -1,18 +1,14 @@
 import { useCallback, useState } from "react";
 
-import {
-	ArrowSquareOut,
-	Check,
-	CopySimple,
-	SpinnerGap,
-	SlackLogo,
-} from "@phosphor-icons/react";
+import { ArrowSquareOut, Check, CopySimple, SlackLogo, SpinnerGap } from "@phosphor-icons/react";
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { api } from "@/lib/api";
 
 interface ChannelState {
 	slack: {
@@ -41,18 +37,11 @@ export function StepConnectChannels({ botName, onNext }: StepConnectChannelsProp
 	const [slackAppToken, setSlackAppToken] = useState("");
 	const [manifestCopied, setManifestCopied] = useState(false);
 
-	const handleSlackConnect = useCallback(async () => {
-		if (!slackBotToken.trim() || !slackAppToken.trim()) return;
-
-		setChannels((prev) => ({
-			...prev,
-			slack: { ...prev.slack, connecting: true },
-		}));
-
-		// Simulate connection verification for now
-		await new Promise((resolve) => setTimeout(resolve, 2000));
-
-		if (slackBotToken.startsWith("xoxb-") && slackAppToken.startsWith("xapp-")) {
+	const slackConnectMutation = useMutation({
+		mutationFn: async () => {
+			return api.setup.slack(slackBotToken.trim(), slackAppToken.trim());
+		},
+		onSuccess: () => {
 			setChannels((prev) => ({
 				...prev,
 				slack: {
@@ -61,14 +50,27 @@ export function StepConnectChannels({ botName, onNext }: StepConnectChannelsProp
 					workspaceName: "My Workspace",
 				},
 			}));
-		} else {
+			toast.success("Connected to Slack.");
+		},
+		onError: (error: Error) => {
 			setChannels((prev) => ({
 				...prev,
 				slack: { ...prev.slack, connecting: false },
 			}));
-			toast.error("Couldn't connect to Slack — check your tokens and try again.");
-		}
-	}, [slackBotToken, slackAppToken]);
+			toast.error(error.message);
+		},
+	});
+
+	const handleSlackConnect = useCallback(async () => {
+		if (!slackBotToken.trim() || !slackAppToken.trim()) return;
+
+		setChannels((prev) => ({
+			...prev,
+			slack: { ...prev.slack, connecting: true },
+		}));
+
+		slackConnectMutation.mutate();
+	}, [slackBotToken, slackAppToken, slackConnectMutation]);
 
 	const handleSlackDisconnect = () => {
 		setChannels((prev) => ({
@@ -94,9 +96,7 @@ export function StepConnectChannels({ botName, onNext }: StepConnectChannelsProp
 					},
 				},
 				oauth_config: {
-					redirect_urls: [
-						"https://knurliest-unforgetfully-tori.ngrok-free.dev/api/slack/callback",
-					],
+					redirect_urls: ["https://knurliest-unforgetfully-tori.ngrok-free.dev/api/slack/callback"],
 					scopes: {
 						bot: [
 							"app_mentions:read",
@@ -121,15 +121,8 @@ export function StepConnectChannels({ botName, onNext }: StepConnectChannelsProp
 				},
 				settings: {
 					event_subscriptions: {
-						request_url:
-							"https://knurliest-unforgetfully-tori.ngrok-free.dev/api/slack/events",
-						bot_events: [
-							"app_mention",
-							"message.channels",
-							"message.groups",
-							"message.im",
-							"message.mpim",
-						],
+						request_url: "https://knurliest-unforgetfully-tori.ngrok-free.dev/api/slack/events",
+						bot_events: ["app_mention", "message.channels", "message.groups", "message.im", "message.mpim"],
 					},
 					interactivity: {
 						is_enabled: true,
@@ -189,10 +182,7 @@ export function StepConnectChannels({ botName, onNext }: StepConnectChannelsProp
 							<span className="text-sm font-medium">Slack</span>
 						</div>
 						{channels.slack.connected ? (
-							<Badge
-								variant="secondary"
-								className="gap-1 border-0 bg-success/10 text-success"
-							>
+							<Badge variant="secondary" className="gap-1 border-0 bg-success/10 text-success">
 								<Check weight="bold" className="size-3" />
 								Connected to &ldquo;{channels.slack.workspaceName}&rdquo;
 							</Badge>
@@ -215,10 +205,7 @@ export function StepConnectChannels({ botName, onNext }: StepConnectChannelsProp
 						<>
 							<ol className="mb-4 list-inside list-decimal space-y-1.5 text-xs text-muted-foreground">
 								<li>Copy the manifest below</li>
-								<li>
-									Go to api.slack.com/apps → &ldquo;Create New App&rdquo; → &ldquo;From a
-									Manifest&rdquo;
-								</li>
+								<li>Go to api.slack.com/apps → &ldquo;Create New App&rdquo; → &ldquo;From a Manifest&rdquo;</li>
 								<li>Select your workspace and paste the manifest</li>
 								<li>Click &ldquo;Install to Workspace&rdquo;</li>
 								<li>Copy the Bot Token (OAuth &amp; Permissions page) and App-Level Token</li>
@@ -240,11 +227,7 @@ export function StepConnectChannels({ botName, onNext }: StepConnectChannelsProp
 									)}
 								</Button>
 								<Button variant="ghost" size="sm" asChild>
-									<a
-										href="https://api.slack.com/apps"
-										target="_blank"
-										rel="noopener noreferrer"
-									>
+									<a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer">
 										Open Slack API
 										<ArrowSquareOut className="size-3.5" />
 									</a>
@@ -282,11 +265,7 @@ export function StepConnectChannels({ botName, onNext }: StepConnectChannelsProp
 									variant="outline"
 									size="sm"
 									onClick={handleSlackConnect}
-									disabled={
-										!slackBotToken.trim() ||
-										!slackAppToken.trim() ||
-										channels.slack.connecting
-									}
+									disabled={!slackBotToken.trim() || !slackAppToken.trim() || channels.slack.connecting}
 								>
 									{channels.slack.connecting ? (
 										<>
@@ -308,12 +287,9 @@ export function StepConnectChannels({ botName, onNext }: StepConnectChannelsProp
 					Continue
 				</Button>
 				{!canContinue && (
-					<p className="mt-2 text-center text-xs text-muted-foreground">
-						Connect at least one channel to continue
-					</p>
+					<p className="mt-2 text-center text-xs text-muted-foreground">Connect at least one channel to continue</p>
 				)}
 			</div>
 		</div>
 	);
 }
-

@@ -8,6 +8,7 @@ import { loadConfig, validateConfig } from "./config";
 import { createDatabase } from "./db/index";
 import { runMigrations } from "./db/migrate";
 import { createChannelRepository } from "./db/repositories/channels";
+import { createSettingsRepository } from "./db/repositories/settings";
 import { createUserRepository } from "./db/repositories/users";
 import { type Attachment, downloadSlackFile, downloadWhatsAppMedia, extensionToMime } from "./files";
 import { createApp } from "./http";
@@ -36,6 +37,7 @@ logger.info("Database ready");
 // 4. Repositories
 const users = createUserRepository(db);
 const channels = createChannelRepository(db);
+const settingsRepo = createSettingsRepository(db);
 
 // 5. Queue manager
 const queueManager = new QueueManager();
@@ -46,12 +48,13 @@ const userCache = new UserCache();
 
 // 7. Slack bot — start only if tokens configured
 let slack: SlackBot | null = null;
-const hasSlack = config.SLACK_APP_TOKEN && config.SLACK_BOT_TOKEN;
+const settingsRow = await settingsRepo.get();
+const hasSlack = settingsRow?.slack_app_token && settingsRow.slack_bot_token;
 
 if (hasSlack) {
 	slack = new SlackBot({
-		appToken: config.SLACK_APP_TOKEN as string,
-		botToken: config.SLACK_BOT_TOKEN as string,
+		appToken: settingsRow.slack_app_token as string,
+		botToken: settingsRow.slack_bot_token as string,
 		logger,
 	});
 	const slackBot = slack;
@@ -75,6 +78,7 @@ if (hasSlack) {
 			logger.info({ slackUserId: message.userId, channelId: message.channelId }, "Processing message");
 
 			const workspaceDir = await ensureWorkspace(config, user.id);
+			const settingsRow = await settingsRepo.get();
 
 			// Download any attached files
 			const attachments: Attachment[] = [];
@@ -97,7 +101,7 @@ if (hasSlack) {
 					try {
 						const downloaded = await downloadSlackFile(
 							file.urlPrivate,
-							config.SLACK_BOT_TOKEN as string,
+							(settingsRow?.slack_bot_token as string) ?? "",
 							attachDir,
 							maxBytes,
 							logger,
@@ -128,6 +132,8 @@ if (hasSlack) {
 					logger,
 					platform: "slack",
 					onMessage,
+					orgName: settingsRow?.org_name,
+					botName: settingsRow?.bot_name,
 					attachments: attachments.length > 0 ? attachments : undefined,
 				});
 
@@ -161,11 +167,12 @@ if (hasSlack) {
 			const workspaceDir = await ensureChannelWorkspace(config, message.channelId);
 			const attachDir = join(workspaceDir, "attachments");
 			const maxBytes = config.MAX_FILE_SIZE_MB * 1024 * 1024;
+			const settingsRow = await settingsRepo.get();
 			for (const file of message.files) {
 				try {
 					const downloaded = await downloadSlackFile(
 						file.urlPrivate,
-						config.SLACK_BOT_TOKEN as string,
+						(settingsRow?.slack_bot_token as string) ?? "",
 						attachDir,
 						maxBytes,
 						logger,
@@ -220,6 +227,7 @@ if (hasSlack) {
 			}
 
 			const workspaceDir = await ensureChannelWorkspace(config, message.channelId);
+			const settingsRow = await settingsRepo.get();
 
 			threadBuffer.register(message.channelId, threadTs);
 
@@ -240,11 +248,12 @@ if (hasSlack) {
 				);
 				const attachDir = join(workspaceDir, "attachments");
 				const maxBytes = config.MAX_FILE_SIZE_MB * 1024 * 1024;
+				const settingsRow = await settingsRepo.get();
 				for (const file of message.files) {
 					try {
 						const downloaded = await downloadSlackFile(
 							file.urlPrivate,
-							config.SLACK_BOT_TOKEN as string,
+							(settingsRow?.slack_bot_token as string) ?? "",
 							attachDir,
 							maxBytes,
 							logger,
@@ -309,6 +318,8 @@ if (hasSlack) {
 					platform: "slack",
 					onMessage,
 					threadTs,
+					orgName: settingsRow?.org_name,
+					botName: settingsRow?.bot_name,
 					attachments: attachments.length > 0 ? attachments : undefined,
 					channelContext: {
 						channelName: channel.name,
@@ -354,6 +365,7 @@ whatsapp.onMessage(async (message) => {
 
 	queue.enqueue(async () => {
 		const workspaceDir = await ensureWorkspace(config, user.id);
+		const settingsRow = await settingsRepo.get();
 		const msgKey = message.rawMessage.key;
 		if (!msgKey) return;
 
@@ -389,6 +401,8 @@ whatsapp.onMessage(async (message) => {
 				logger,
 				platform: "whatsapp",
 				onMessage,
+				orgName: settingsRow?.org_name,
+				botName: settingsRow?.bot_name,
 				attachments: attachments.length > 0 ? attachments : undefined,
 			});
 

@@ -1,10 +1,13 @@
 import { useState } from "react";
 
 import { SpinnerGap } from "@phosphor-icons/react";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type Provider = "anthropic" | "bedrock";
@@ -16,14 +19,7 @@ interface StepConfigureLLMProps {
 	}) => void;
 }
 
-const bedrockRegions = [
-	"us-east-1",
-	"us-west-2",
-	"eu-west-1",
-	"eu-west-3",
-	"ap-southeast-1",
-	"ap-northeast-1",
-];
+const bedrockRegions = ["us-east-1", "us-west-2", "eu-west-1", "eu-west-3", "ap-southeast-1", "ap-northeast-1"];
 
 export function StepConfigureLLM({ onNext }: StepConfigureLLMProps) {
 	const [provider, setProvider] = useState<Provider>("anthropic");
@@ -31,33 +27,30 @@ export function StepConfigureLLM({ onNext }: StepConfigureLLMProps) {
 	const [awsAccessKey, setAwsAccessKey] = useState("");
 	const [awsSecretKey, setAwsSecretKey] = useState("");
 	const [awsRegion, setAwsRegion] = useState("us-east-1");
-	const [isVerifying, setIsVerifying] = useState(false);
 	const [isConnected, setIsConnected] = useState(false);
 	const [error, setError] = useState("");
 
-	const handleConnect = async () => {
-		setError("");
-		setIsVerifying(true);
-
-		// Simulate API verification for now
-		await new Promise((resolve) => setTimeout(resolve, 2000));
-
-		if (provider === "anthropic") {
-			if (apiKey.startsWith("sk-ant-")) {
-				setIsConnected(true);
-				setIsVerifying(false);
-			} else {
-				setError("Invalid API key. Check your key and try again.");
-				setIsVerifying(false);
+	const connectMutation = useMutation({
+		mutationFn: async () => {
+			setError("");
+			if (provider === "anthropic") {
+				return api.setup.llm({ provider: "anthropic", apiKey: apiKey.trim() });
 			}
-		} else if (awsAccessKey && awsSecretKey && awsRegion) {
+			return api.setup.llm({
+				provider: "bedrock",
+				awsAccessKeyId: awsAccessKey.trim(),
+				awsSecretAccessKey: awsSecretKey.trim(),
+				awsRegion,
+			});
+		},
+		onSuccess: () => {
 			setIsConnected(true);
-			setIsVerifying(false);
-		} else {
-			setError("API key doesn't have required permissions. Ensure your key has access to Claude models.");
-			setIsVerifying(false);
-		}
-	};
+			toast.success(`Connected to ${provider === "anthropic" ? "Anthropic" : "AWS Bedrock"}, using Claude Sonnet.`);
+		},
+		onError: (err: Error) => {
+			setError(err.message);
+		},
+	});
 
 	const handleContinue = () => {
 		onNext({ provider, connected: isConnected });
@@ -66,7 +59,9 @@ export function StepConfigureLLM({ onNext }: StepConfigureLLMProps) {
 	const canConnect =
 		provider === "anthropic"
 			? apiKey.trim().length > 0
-			: awsAccessKey.trim().length > 0 && awsSecretKey.trim().length > 0;
+			: awsAccessKey.trim().length > 0 && awsSecretKey.trim().length > 0 && awsRegion.trim().length > 0;
+
+	const isVerifying = connectMutation.isPending;
 
 	return (
 		<div className="w-full max-w-[520px]">
@@ -113,7 +108,8 @@ export function StepConfigureLLM({ onNext }: StepConfigureLLMProps) {
 							)}
 						>
 							<div className="mb-1.5 flex items-center gap-2">
-								<svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
+								<svg className="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+									<title>Anthropic logo</title>
 									<path d="M13.827 3.52h3.603L24 20.48h-3.603l-6.57-16.96zm-7.258 0h3.604L16.742 20.48h-3.603L6.569 3.52zM0 20.48h3.604L10.174 3.52H6.569L0 20.48z" />
 								</svg>
 								<span className="text-sm font-medium">Anthropic (Direct)</span>
@@ -134,7 +130,8 @@ export function StepConfigureLLM({ onNext }: StepConfigureLLMProps) {
 							)}
 						>
 							<div className="mb-1.5 flex items-center gap-2">
-								<svg className="size-4" viewBox="0 0 24 24" fill="currentColor">
+								<svg className="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+									<title>AWS logo</title>
 									<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
 								</svg>
 								<span className="text-sm font-medium">AWS Bedrock</span>
@@ -215,11 +212,7 @@ export function StepConfigureLLM({ onNext }: StepConfigureLLMProps) {
 						Sketch defaults to Claude Sonnet. You can switch models per conversation from chat settings.
 					</p>
 
-					<Button
-						className="w-full"
-						onClick={handleConnect}
-						disabled={!canConnect || isVerifying}
-					>
+					<Button className="w-full" onClick={() => connectMutation.mutate()} disabled={!canConnect || isVerifying}>
 						{isVerifying ? (
 							<>
 								<SpinnerGap className="size-4 animate-spin" />
@@ -234,4 +227,3 @@ export function StepConfigureLLM({ onNext }: StepConfigureLLMProps) {
 		</div>
 	);
 }
-

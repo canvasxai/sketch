@@ -23,7 +23,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ChannelStatus } from "@/lib/api";
 import { api } from "@/lib/api";
-import { CheckIcon, DotsThreeIcon, SlackLogoIcon, WarningIcon, WhatsappLogoIcon, XCircleIcon } from "@phosphor-icons/react";
+import {
+	CheckIcon,
+	DotsThreeIcon,
+	SlackLogoIcon,
+	WarningIcon,
+	WhatsappLogoIcon,
+	XCircleIcon,
+} from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { createRoute } from "@tanstack/react-router";
 import { useState } from "react";

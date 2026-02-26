@@ -30,24 +30,17 @@ export function StepCompletion({ data, onGoToDashboard }: StepCompletionProps) {
 		},
 		{
 			label: "Slack",
-			value: data.slackConnected
-				? `Connected to "${data.slackWorkspace ?? "Workspace"}"`
-				: "Not connected",
+			value: data.slackConnected ? `Connected to "${data.slackWorkspace ?? "Workspace"}"` : "Not connected",
 			connected: data.slackConnected,
 		},
 		{
 			label: "WhatsApp",
-			value: data.whatsappConnected
-				? `Connected — ${data.whatsappPhone ?? "Phone"}`
-				: "Not connected",
+			value: data.whatsappConnected ? `Connected — ${data.whatsappPhone ?? "Phone"}` : "Not connected",
 			connected: data.whatsappConnected,
 		},
 		{
 			label: "LLM",
-			value:
-				data.llmProvider === "anthropic"
-					? "Anthropic (Sonnet)"
-					: "AWS Bedrock (Sonnet)",
+			value: data.llmProvider === "anthropic" ? "Anthropic (Sonnet)" : "AWS Bedrock (Sonnet)",
 			connected: true,
 		},
 		{
@@ -69,24 +62,16 @@ export function StepCompletion({ data, onGoToDashboard }: StepCompletionProps) {
 			</div>
 
 			<h1 className="mb-2 text-xl font-semibold">Sketch is ready</h1>
-			<p className="mb-8 text-sm text-muted-foreground">
-				Your instance is configured and ready to go.
-			</p>
+			<p className="mb-8 text-sm text-muted-foreground">Your instance is configured and ready to go.</p>
 
 			<div className="divide-y rounded-lg border bg-card text-left">
 				{summaryItems.map((item) => (
-					<div
-						key={item.label}
-						className="flex items-center justify-between px-4 py-3"
-					>
+					<div key={item.label} className="flex items-center justify-between px-4 py-3">
 						<span className="text-sm text-muted-foreground">{item.label}</span>
 						<div className="flex items-center gap-1.5">
 							{"connected" in item &&
 								(item.connected ? (
-									<Check
-										weight="bold"
-										className="size-3.5 text-success"
-									/>
+									<Check weight="bold" className="size-3.5 text-success" />
 								) : (
 									<Minus className="size-3.5 text-muted-foreground" />
 								))}
@@ -102,4 +87,3 @@ export function StepCompletion({ data, onGoToDashboard }: StepCompletionProps) {
 		</div>
 	);
 }
-

@@ -11,6 +11,7 @@ import { authRoutes } from "./api/auth";
 import { channelRoutes } from "./api/channels";
 import { healthRoutes } from "./api/health";
 import { createAuthMiddleware } from "./api/middleware";
+import { settingsRoutes } from "./api/settings";
 import { setupRoutes } from "./api/setup";
 import { whatsappRoutes } from "./api/whatsapp";
 import type { Config } from "./config";
@@ -35,6 +36,7 @@ export function createApp(db: Kysely<DB>, _config: Config, deps?: AppDeps) {
 	app.route("/api/health", healthRoutes(db));
 	app.route("/api/auth", authRoutes(settings));
 	app.route("/api/setup", setupRoutes(settings));
+	app.route("/api/settings", settingsRoutes(settings));
 	app.route("/api/channels", channelRoutes({ whatsapp: deps?.whatsapp, slack: deps?.slack }));
 
 	if (deps?.whatsapp) {

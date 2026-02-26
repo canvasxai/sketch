@@ -23,8 +23,19 @@ import { api } from "@/lib/api";
  * App sidebar — navigation, branding, and user actions.
  * Follows the designer's sidebar structure with Phosphor icons.
  */
-import { BrainIcon, ChatCircleIcon, GearIcon, LinkSimpleIcon, MoonIcon, SignOutIcon, SparkleIcon, SunIcon, UsersThreeIcon, CaretUpDownIcon } from "@phosphor-icons/react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+	BrainIcon,
+	CaretUpDownIcon,
+	ChatCircleIcon,
+	GearIcon,
+	LinkSimpleIcon,
+	MoonIcon,
+	SignOutIcon,
+	SparkleIcon,
+	SunIcon,
+	UsersThreeIcon,
+} from "@phosphor-icons/react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
 interface NavItem {
@@ -51,6 +62,11 @@ export function AppSidebar({ email }: { email: string }) {
 	const { theme, toggleTheme } = useTheme();
 	const queryClient = useQueryClient();
 
+	const { data: identity } = useQuery({
+		queryKey: ["settings", "identity"],
+		queryFn: () => api.settings.identity(),
+	});
+
 	const logoutMutation = useMutation({
 		mutationFn: () => api.auth.logout(),
 		onSuccess: () => {
@@ -71,7 +87,7 @@ export function AppSidebar({ email }: { email: string }) {
 								<SparkleIcon size={14} weight="fill" className="text-primary-foreground" />
 							</div>
 							<span className="text-base font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
-								Sketch
+								{identity?.botName ?? "Sketch"}
 							</span>
 						</SidebarMenuButton>
 					</SidebarMenuItem>

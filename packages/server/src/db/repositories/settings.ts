@@ -21,11 +21,31 @@ export function createSettingsRepository(db: Kysely<DB>) {
 			return db.selectFrom("settings").selectAll().where("id", "=", "default").executeTakeFirstOrThrow();
 		},
 
-		async update(data: Partial<{ orgName: string; botName: string; onboardingCompletedAt: string }>) {
-			const updates: Record<string, string> = {};
+		async update(
+			data: Partial<{
+				orgName: string;
+				botName: string;
+				onboardingCompletedAt: string;
+				slackBotToken: string | null;
+				slackAppToken: string | null;
+				llmProvider: string | null;
+				anthropicApiKey: string | null;
+				awsAccessKeyId: string | null;
+				awsSecretAccessKey: string | null;
+				awsRegion: string | null;
+			}>,
+		) {
+			const updates: Record<string, string | null> = {};
 			if (data.orgName !== undefined) updates.org_name = data.orgName;
 			if (data.botName !== undefined) updates.bot_name = data.botName;
 			if (data.onboardingCompletedAt !== undefined) updates.onboarding_completed_at = data.onboardingCompletedAt;
+			if (data.slackBotToken !== undefined) updates.slack_bot_token = data.slackBotToken;
+			if (data.slackAppToken !== undefined) updates.slack_app_token = data.slackAppToken;
+			if (data.llmProvider !== undefined) updates.llm_provider = data.llmProvider;
+			if (data.anthropicApiKey !== undefined) updates.anthropic_api_key = data.anthropicApiKey;
+			if (data.awsAccessKeyId !== undefined) updates.aws_access_key_id = data.awsAccessKeyId;
+			if (data.awsSecretAccessKey !== undefined) updates.aws_secret_access_key = data.awsSecretAccessKey;
+			if (data.awsRegion !== undefined) updates.aws_region = data.awsRegion;
 
 			if (Object.keys(updates).length === 0) return;
 

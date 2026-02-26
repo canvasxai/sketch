@@ -67,21 +67,6 @@ describe("configSchema", () => {
 			const result = configSchema.safeParse({ LOG_LEVEL: "trace" });
 			expect(result.success).toBe(false);
 		});
-
-		it("rejects SLACK_APP_TOKEN without xapp- prefix", () => {
-			const result = configSchema.safeParse({ SLACK_APP_TOKEN: "invalid-token" });
-			expect(result.success).toBe(false);
-		});
-
-		it("rejects SLACK_BOT_TOKEN without xoxb- prefix", () => {
-			const result = configSchema.safeParse({ SLACK_BOT_TOKEN: "invalid-token" });
-			expect(result.success).toBe(false);
-		});
-
-		it("rejects ANTHROPIC_BASE_URL with invalid URL", () => {
-			const result = configSchema.safeParse({ ANTHROPIC_BASE_URL: "not-a-url" });
-			expect(result.success).toBe(false);
-		});
 	});
 });
 
@@ -107,88 +92,10 @@ describe("validateConfig", () => {
 		});
 	}
 
-	describe("LLM provider validation", () => {
-		it("exits when no LLM provider is set", () => {
-			const exitSpy = mockProcessExit();
-			const config = makeConfig({ SLACK_APP_TOKEN: "xapp-test", SLACK_BOT_TOKEN: "xoxb-test" });
-			expect(() => validateConfig(config)).toThrow("exit");
-			expect(exitSpy).toHaveBeenCalledWith(1);
-		});
-
-		it("does not exit when only ANTHROPIC_API_KEY is set", () => {
-			const exitSpy = mockProcessExit();
-			const config = makeConfig({
-				ANTHROPIC_API_KEY: "sk-test",
-				SLACK_APP_TOKEN: "xapp-test",
-				SLACK_BOT_TOKEN: "xoxb-test",
-			});
-			validateConfig(config);
-			expect(exitSpy).not.toHaveBeenCalled();
-		});
-
-		it("does not exit when only CLAUDE_CODE_USE_BEDROCK is set", () => {
-			const exitSpy = mockProcessExit();
-			const config = makeConfig({
-				CLAUDE_CODE_USE_BEDROCK: "1",
-				SLACK_APP_TOKEN: "xapp-test",
-				SLACK_BOT_TOKEN: "xoxb-test",
-			});
-			validateConfig(config);
-			expect(exitSpy).not.toHaveBeenCalled();
-		});
-
-		it("does not exit when only CLAUDE_CODE_USE_VERTEX is set", () => {
-			const exitSpy = mockProcessExit();
-			const config = makeConfig({
-				CLAUDE_CODE_USE_VERTEX: "1",
-				SLACK_APP_TOKEN: "xapp-test",
-				SLACK_BOT_TOKEN: "xoxb-test",
-			});
-			validateConfig(config);
-			expect(exitSpy).not.toHaveBeenCalled();
-		});
-
-		it("does not exit when only ANTHROPIC_BASE_URL is set", () => {
-			const exitSpy = mockProcessExit();
-			const config = makeConfig({
-				ANTHROPIC_BASE_URL: "https://api.example.com",
-				SLACK_APP_TOKEN: "xapp-test",
-				SLACK_BOT_TOKEN: "xoxb-test",
-			});
-			validateConfig(config);
-			expect(exitSpy).not.toHaveBeenCalled();
-		});
-	});
-
 	describe("Slack token validation", () => {
 		it("does not exit when Slack tokens are missing (WhatsApp-only deployment)", () => {
 			const exitSpy = mockProcessExit();
-			const config = makeConfig({ ANTHROPIC_API_KEY: "sk-test" });
-			validateConfig(config);
-			expect(exitSpy).not.toHaveBeenCalled();
-		});
-
-		it("exits when SLACK_APP_TOKEN provided without SLACK_BOT_TOKEN", () => {
-			const exitSpy = mockProcessExit();
-			const config = makeConfig({ ANTHROPIC_API_KEY: "sk-test", SLACK_APP_TOKEN: "xapp-test" });
-			expect(() => validateConfig(config)).toThrow("exit");
-			expect(exitSpy).toHaveBeenCalledWith(1);
-		});
-
-		it("exits when SLACK_BOT_TOKEN provided without SLACK_APP_TOKEN", () => {
-			const exitSpy = mockProcessExit();
-			const config = makeConfig({ ANTHROPIC_API_KEY: "sk-test", SLACK_BOT_TOKEN: "xoxb-test" });
-			expect(() => validateConfig(config)).toThrow("exit");
-			expect(exitSpy).toHaveBeenCalledWith(1);
-		});
-
-		it("does not exit when both Slack tokens are provided", () => {
-			const exitSpy = mockProcessExit();
-			const config = makeConfig({
-				ANTHROPIC_API_KEY: "sk-test",
-				SLACK_APP_TOKEN: "xapp-test",
-				SLACK_BOT_TOKEN: "xoxb-test",
-			});
+			const config = makeConfig();
 			validateConfig(config);
 			expect(exitSpy).not.toHaveBeenCalled();
 		});
@@ -199,9 +106,6 @@ describe("validateConfig", () => {
 			const exitSpy = mockProcessExit();
 			const config = makeConfig({
 				DB_TYPE: "postgres",
-				ANTHROPIC_API_KEY: "sk-test",
-				SLACK_APP_TOKEN: "xapp-test",
-				SLACK_BOT_TOKEN: "xoxb-test",
 			});
 			expect(() => validateConfig(config)).toThrow("exit");
 			expect(exitSpy).toHaveBeenCalledWith(1);
@@ -212,9 +116,6 @@ describe("validateConfig", () => {
 			const config = makeConfig({
 				DB_TYPE: "postgres",
 				DATABASE_URL: "postgresql://localhost:5432/sketch",
-				ANTHROPIC_API_KEY: "sk-test",
-				SLACK_APP_TOKEN: "xapp-test",
-				SLACK_BOT_TOKEN: "xoxb-test",
 			});
 			validateConfig(config);
 			expect(exitSpy).not.toHaveBeenCalled();

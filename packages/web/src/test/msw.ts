@@ -21,6 +21,49 @@ export const handlers = [
 		return HttpResponse.json({ success: true });
 	}),
 
+	http.post("/api/setup/slack", async ({ request }) => {
+		const body = (await request.json()) as { botToken?: string; appToken?: string };
+		if (!body.botToken || !body.appToken) {
+			return HttpResponse.json(
+				{ error: { code: "BAD_REQUEST", message: "Bot token and app token required" } },
+				{ status: 400 },
+			);
+		}
+		return HttpResponse.json({ success: true });
+	}),
+
+	http.post("/api/setup/identity", async ({ request }) => {
+		const body = (await request.json()) as { orgName?: string; botName?: string };
+		if (!body.orgName || !body.botName) {
+			return HttpResponse.json(
+				{ error: { code: "BAD_REQUEST", message: "Organization and bot name required" } },
+				{ status: 400 },
+			);
+		}
+		return HttpResponse.json({ success: true });
+	}),
+
+	http.post("/api/setup/llm", async ({ request }) => {
+		const body = (await request.json()) as
+			| { provider: "anthropic"; apiKey?: string }
+			| { provider: "bedrock"; awsAccessKeyId?: string; awsSecretAccessKey?: string; awsRegion?: string };
+
+		if (body.provider === "anthropic") {
+			if (!body.apiKey) {
+				return HttpResponse.json({ error: { code: "BAD_REQUEST", message: "API key required" } }, { status: 400 });
+			}
+			return HttpResponse.json({ success: true });
+		}
+
+		if (!body.awsAccessKeyId || !body.awsSecretAccessKey || !body.awsRegion) {
+			return HttpResponse.json(
+				{ error: { code: "BAD_REQUEST", message: "AWS credentials required" } },
+				{ status: 400 },
+			);
+		}
+		return HttpResponse.json({ success: true });
+	}),
+
 	http.get("/api/auth/session", () => {
 		return HttpResponse.json({ authenticated: false });
 	}),

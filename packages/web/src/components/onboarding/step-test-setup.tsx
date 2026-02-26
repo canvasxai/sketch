@@ -49,16 +49,13 @@ export function StepTestSetup({
 			<div className="mb-1">
 				<h1 className="text-xl font-semibold">Test your setup</h1>
 			</div>
-			<p className="mb-6 text-sm text-muted-foreground">
-				Send a message to Sketch to make sure everything works.
-			</p>
+			<p className="mb-6 text-sm text-muted-foreground">Send a message to Sketch to make sure everything works.</p>
 
 			<div className="mb-6 space-y-3">
 				{slackConnected && (
 					<div className="rounded-lg border bg-card p-4">
 						<p className="text-sm">
-							Open Slack and send a message to{" "}
-							<span className="font-medium">@{botName}</span> in any channel or via DM.
+							Open Slack and send a message to <span className="font-medium">@{botName}</span> in any channel or via DM.
 						</p>
 					</div>
 				)}
@@ -84,8 +81,7 @@ export function StepTestSetup({
 						<p className="text-sm text-muted-foreground">Waiting for your message...</p>
 						{showHint && (
 							<p className="mt-3 text-center text-xs text-muted-foreground">
-								Haven&apos;t received a message yet? Make sure you&apos;re messaging the right number
-								or bot.
+								Haven&apos;t received a message yet? Make sure you&apos;re messaging the right number or bot.
 							</p>
 						)}
 					</div>
@@ -107,10 +103,7 @@ export function StepTestSetup({
 
 							<div className="flex items-start gap-2">
 								<div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary">
-									<ChatCircle
-										weight="fill"
-										className="size-3.5 text-primary-foreground"
-									/>
+									<ChatCircle weight="fill" className="size-3.5 text-primary-foreground" />
 								</div>
 								<div>
 									<p className="mb-1 text-xs text-muted-foreground">
@@ -118,8 +111,7 @@ export function StepTestSetup({
 									</p>
 									<div className="rounded-lg bg-muted/50 px-3 py-2">
 										<p className="text-sm">
-											Hi there! I&apos;m {botName}, your AI assistant from {organizationName}. How
-											can I help you today?
+											Hi there! I&apos;m {botName}, your AI assistant from {organizationName}. How can I help you today?
 										</p>
 									</div>
 								</div>
@@ -130,11 +122,7 @@ export function StepTestSetup({
 			</div>
 
 			<div className="mt-6 space-y-2">
-				<Button
-					className="w-full"
-					disabled={!messageReceived}
-					onClick={onNext}
-				>
+				<Button className="w-full" disabled={!messageReceived} onClick={onNext}>
 					Continue
 				</Button>
 				<button
@@ -148,4 +136,3 @@ export function StepTestSetup({
 		</div>
 	);
 }
-

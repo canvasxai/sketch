@@ -1,7 +1,3 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ProgressIndicator } from "@/components/onboarding/progress-indicator";
 import { StepBotIdentity } from "@/components/onboarding/step-bot-identity";
 import { StepCompletion } from "@/components/onboarding/step-completion";
@@ -9,6 +5,10 @@ import { StepConfigureLLM } from "@/components/onboarding/step-configure-llm";
 import { StepConnectChannels } from "@/components/onboarding/step-connect-channels";
 import { StepInviteTeam } from "@/components/onboarding/step-invite-team";
 import { StepTestSetup } from "@/components/onboarding/step-test-setup";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { Eye, EyeSlash, Info, Sparkle, SpinnerGap } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
@@ -130,12 +130,7 @@ function OnboardingPage() {
 			);
 			break;
 		default:
-			content = (
-				<StepCompletion
-					data={onboardingData}
-					onGoToDashboard={() => navigate({ to: "/login" })}
-				/>
-			);
+			content = <StepCompletion data={onboardingData} onGoToDashboard={() => navigate({ to: "/login" })} />;
 	}
 
 	return (

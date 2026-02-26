@@ -14,7 +14,7 @@ vi.mock("@tanstack/react-router", async () => {
 
 describe("CreateAccountStep", () => {
 	it("renders email, password, and confirm password fields", () => {
-		renderWithProviders(<CreateAccountStep />);
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
 
 		expect(screen.getByLabelText("Email")).toBeInTheDocument();
 		expect(screen.getByLabelText("Password")).toBeInTheDocument();
@@ -23,7 +23,7 @@ describe("CreateAccountStep", () => {
 
 	it("shows validation error for empty email on submit", async () => {
 		const user = userEvent.setup();
-		renderWithProviders(<CreateAccountStep />);
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
 
 		await user.click(screen.getByRole("button", { name: "Continue" }));
 		expect(screen.getByText("Email is required")).toBeInTheDocument();
@@ -31,7 +31,7 @@ describe("CreateAccountStep", () => {
 
 	it("shows validation error for invalid email format", async () => {
 		const user = userEvent.setup();
-		renderWithProviders(<CreateAccountStep />);
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
 
 		// "user@domain" passes HTML5 type="email" constraint but fails our regex
 		// which requires a dot in the domain part
@@ -45,7 +45,7 @@ describe("CreateAccountStep", () => {
 
 	it("shows validation error for short password", async () => {
 		const user = userEvent.setup();
-		renderWithProviders(<CreateAccountStep />);
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
 
 		await user.type(screen.getByLabelText("Email"), "admin@test.com");
 		await user.type(screen.getByLabelText("Password"), "short");
@@ -57,7 +57,7 @@ describe("CreateAccountStep", () => {
 
 	it("shows validation error when passwords don't match", async () => {
 		const user = userEvent.setup();
-		renderWithProviders(<CreateAccountStep />);
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
 
 		await user.type(screen.getByLabelText("Email"), "admin@test.com");
 		await user.type(screen.getByLabelText("Password"), "password123");
@@ -83,7 +83,7 @@ describe("CreateAccountStep", () => {
 		);
 
 		const user = userEvent.setup();
-		renderWithProviders(<CreateAccountStep />);
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
 
 		await user.type(screen.getByLabelText("Email"), "admin@test.com");
 		await user.type(screen.getByLabelText("Password"), "password123");
@@ -106,7 +106,7 @@ describe("CreateAccountStep", () => {
 		);
 
 		const user = userEvent.setup();
-		renderWithProviders(<CreateAccountStep />);
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
 
 		await user.type(screen.getByLabelText("Email"), "admin@test.com");
 		await user.type(screen.getByLabelText("Password"), "password123");
@@ -127,7 +127,7 @@ describe("CreateAccountStep", () => {
 		);
 
 		const user = userEvent.setup();
-		renderWithProviders(<CreateAccountStep />);
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
 
 		await user.type(screen.getByLabelText("Email"), "admin@test.com");
 		await user.type(screen.getByLabelText("Password"), "password123");
@@ -140,7 +140,7 @@ describe("CreateAccountStep", () => {
 	});
 
 	it("shows info callout about saving credentials", () => {
-		renderWithProviders(<CreateAccountStep />);
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
 		expect(screen.getByText(/Save these credentials/)).toBeInTheDocument();
 	});
 });

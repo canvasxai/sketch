@@ -1,10 +1,13 @@
 import { useState } from "react";
 
 import { ChatCircle } from "@phosphor-icons/react";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { api } from "@/lib/api";
 
 interface StepBotIdentityProps {
 	onNext: (data: { organizationName: string; botName: string }) => void;
@@ -14,6 +17,16 @@ export function StepBotIdentity({ onNext }: StepBotIdentityProps) {
 	const [organizationName, setOrganizationName] = useState("");
 	const [botName, setBotName] = useState("Sketch");
 	const [errors, setErrors] = useState<Record<string, string>>({});
+
+	const identityMutation = useMutation({
+		mutationFn: () => api.setup.identity(organizationName.trim(), botName.trim()),
+		onSuccess: () => {
+			onNext({ organizationName: organizationName.trim(), botName: botName.trim() });
+		},
+		onError: (error: Error) => {
+			toast.error(error.message);
+		},
+	});
 
 	const validate = () => {
 		const newErrors: Record<string, string> = {};
@@ -30,7 +43,7 @@ export function StepBotIdentity({ onNext }: StepBotIdentityProps) {
 	const handleSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!validate()) return;
-		onNext({ organizationName: organizationName.trim(), botName: botName.trim() });
+		identityMutation.mutate();
 	};
 
 	const previewBotName = botName.trim() || "Sketch";
@@ -55,9 +68,7 @@ export function StepBotIdentity({ onNext }: StepBotIdentityProps) {
 						placeholder="Acme Corp"
 						aria-invalid={!!errors.organizationName}
 					/>
-					{errors.organizationName && (
-						<p className="text-xs text-destructive">{errors.organizationName}</p>
-					)}
+					{errors.organizationName && <p className="text-xs text-destructive">{errors.organizationName}</p>}
 				</div>
 
 				<div className="space-y-2">
@@ -81,9 +92,7 @@ export function StepBotIdentity({ onNext }: StepBotIdentityProps) {
 						<div className="space-y-1">
 							<p className="text-sm font-medium">
 								{previewBotName}{" "}
-								<span className="text-xs font-normal text-muted-foreground">
-									from {previewOrgName}
-								</span>
+								<span className="text-xs font-normal text-muted-foreground">from {previewOrgName}</span>
 							</p>
 							<div className="rounded-lg bg-muted/50 px-3 py-2">
 								<p className="text-sm text-muted-foreground">
@@ -94,11 +103,10 @@ export function StepBotIdentity({ onNext }: StepBotIdentityProps) {
 					</div>
 				</div>
 
-				<Button type="submit" className="w-full">
+				<Button type="submit" className="w-full" disabled={identityMutation.isPending}>
 					Continue
 				</Button>
 			</form>
 		</div>
 	);
 }
-
