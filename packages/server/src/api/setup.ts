@@ -53,7 +53,11 @@ const llmSchema = z.discriminatedUnion("provider", [
 
 type SettingsRepo = ReturnType<typeof createSettingsRepository>;
 
-export function setupRoutes(settings: SettingsRepo) {
+interface SetupDeps {
+	onSlackTokensUpdated?: () => Promise<void>;
+}
+
+export function setupRoutes(settings: SettingsRepo, deps: SetupDeps = {}) {
 	const routes = new Hono();
 
 	routes.get("/status", async (c) => {
@@ -128,6 +132,9 @@ export function setupRoutes(settings: SettingsRepo) {
 			slackBotToken: parsed.data.botToken.trim(),
 			slackAppToken: parsed.data.appToken.trim(),
 		});
+		if (deps.onSlackTokensUpdated) {
+			await deps.onSlackTokensUpdated();
+		}
 
 		return c.json({ success: true });
 	});

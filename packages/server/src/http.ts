@@ -22,7 +22,8 @@ import type { WhatsAppBot } from "./whatsapp/bot";
 
 interface AppDeps {
 	whatsapp?: WhatsAppBot;
-	slack?: SlackBot;
+	getSlack?: () => SlackBot | null;
+	onSlackTokensUpdated?: () => Promise<void>;
 }
 
 export function createApp(db: Kysely<DB>, _config: Config, deps?: AppDeps) {
@@ -35,9 +36,14 @@ export function createApp(db: Kysely<DB>, _config: Config, deps?: AppDeps) {
 	// API routes
 	app.route("/api/health", healthRoutes(db));
 	app.route("/api/auth", authRoutes(settings));
-	app.route("/api/setup", setupRoutes(settings));
+	app.route(
+		"/api/setup",
+		setupRoutes(settings, {
+			onSlackTokensUpdated: deps?.onSlackTokensUpdated,
+		}),
+	);
 	app.route("/api/settings", settingsRoutes(settings));
-	app.route("/api/channels", channelRoutes({ whatsapp: deps?.whatsapp, slack: deps?.slack }));
+	app.route("/api/channels", channelRoutes({ whatsapp: deps?.whatsapp, getSlack: deps?.getSlack }));
 
 	if (deps?.whatsapp) {
 		app.route("/api/whatsapp", whatsappRoutes(deps.whatsapp));
