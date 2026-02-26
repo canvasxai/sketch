@@ -23,7 +23,7 @@ import type { WhatsAppBot } from "./whatsapp/bot";
 interface AppDeps {
 	whatsapp?: WhatsAppBot;
 	getSlack?: () => SlackBot | null;
-	onSlackTokensUpdated?: () => Promise<void>;
+	onSlackTokensUpdated?: (tokens?: { botToken: string; appToken: string }) => Promise<void>;
 }
 
 export function createApp(db: Kysely<DB>, _config: Config, deps?: AppDeps) {

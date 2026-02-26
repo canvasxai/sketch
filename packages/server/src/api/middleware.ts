@@ -27,7 +27,7 @@ export function createAuthMiddleware(settings: SettingsRepo) {
 		let setupComplete = false;
 		try {
 			const row = await settings.get();
-			setupComplete = Boolean(row?.admin_email);
+			setupComplete = Boolean(row?.onboarding_completed_at);
 		} catch {
 			// DB unavailable — let public paths through, block everything else
 		}

@@ -64,8 +64,20 @@ export const handlers = [
 		return HttpResponse.json({ success: true });
 	}),
 
+	http.post("/api/setup/complete", async () => {
+		return HttpResponse.json({ success: true });
+	}),
+
 	http.get("/api/auth/session", () => {
 		return HttpResponse.json({ authenticated: false });
+	}),
+
+	http.post("/api/auth/login", async ({ request }) => {
+		const body = (await request.json()) as { email?: string; password?: string };
+		if (!body.email || !body.password) {
+			return HttpResponse.json({ error: { code: "BAD_REQUEST", message: "Email and password required" } }, { status: 400 });
+		}
+		return HttpResponse.json({ authenticated: true, email: body.email });
 	}),
 ];
 

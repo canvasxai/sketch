@@ -86,9 +86,14 @@ export function AppSidebar({ email }: { email: string }) {
 							<div className="flex size-7 items-center justify-center rounded-md bg-primary">
 								<SparkleIcon size={14} weight="fill" className="text-primary-foreground" />
 							</div>
-							<span className="text-base font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
-								{identity?.botName ?? "Sketch"}
-							</span>
+							<div className="flex flex-col text-left group-data-[collapsible=icon]:hidden">
+								<span className="text-base font-semibold tracking-tight">
+									{identity?.botName ?? "Sketch"}
+								</span>
+								{identity?.orgName ? (
+									<span className="text-xs text-muted-foreground truncate">{identity.orgName}</span>
+								) : null}
+							</div>
 						</SidebarMenuButton>
 					</SidebarMenuItem>
 				</SidebarMenu>

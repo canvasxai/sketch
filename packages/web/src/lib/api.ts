@@ -63,6 +63,11 @@ export const api = {
 				body: JSON.stringify(data),
 			});
 		},
+		complete() {
+			return request<{ success: boolean }>("/api/setup/complete", {
+				method: "POST",
+			});
+		},
 	},
 	auth: {
 		login(email: string, password: string) {

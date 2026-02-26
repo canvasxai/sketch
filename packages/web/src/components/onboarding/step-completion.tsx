@@ -1,6 +1,9 @@
 import { Check, Minus } from "@phosphor-icons/react";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
 
 interface OnboardingData {
 	organizationName: string;
@@ -19,6 +22,17 @@ interface StepCompletionProps {
 }
 
 export function StepCompletion({ data, onGoToDashboard }: StepCompletionProps) {
+	const completeMutation = useMutation({
+		mutationFn: () => api.setup.complete(),
+		onSuccess: () => {
+			toast.success("Onboarding completed. Redirecting to dashboard.");
+			onGoToDashboard();
+		},
+		onError: (error: Error) => {
+			toast.error(error.message);
+		},
+	});
+
 	const summaryItems = [
 		{
 			label: "Organization",
@@ -81,8 +95,8 @@ export function StepCompletion({ data, onGoToDashboard }: StepCompletionProps) {
 				))}
 			</div>
 
-			<Button className="mt-6 w-full" onClick={onGoToDashboard}>
-				Go to Dashboard
+			<Button className="mt-6 w-full" onClick={() => completeMutation.mutate()} disabled={completeMutation.isPending}>
+				{completeMutation.isPending ? "Finishing setup..." : "Go to Dashboard"}
 			</Button>
 		</div>
 	);

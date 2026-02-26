@@ -50,23 +50,56 @@ const userCache = new UserCache();
 let slack: SlackBot | null = null;
 let slackStarting = false;
 
-async function startSlackBotIfConfigured() {
-	if (slack || slackStarting) {
+async function slackApiCall(token: string, endpoint: "auth.test" | "apps.connections.open") {
+	const response = await fetch(`https://slack.com/api/${endpoint}`, {
+		method: "POST",
+		headers: {
+			Authorization: `Bearer ${token}`,
+			"Content-Type": "application/x-www-form-urlencoded",
+		},
+	});
+	const body = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+	if (!response.ok || !body.ok) {
+		throw new Error(body.error ?? "invalid_auth");
+	}
+}
+
+async function validateSlackTokens(botToken: string, appToken: string) {
+	await slackApiCall(botToken, "auth.test");
+	await slackApiCall(appToken, "apps.connections.open");
+}
+
+async function startSlackBotIfConfigured(tokens?: { botToken: string; appToken: string }) {
+	if (slackStarting) {
 		return;
 	}
 
 	slackStarting = true;
 	try {
-		const settingsRow = await settingsRepo.get();
-		const hasSlackTokens = settingsRow?.slack_app_token && settingsRow.slack_bot_token;
+		const settingsRow = tokens ? null : await settingsRepo.get();
+		const botToken = tokens?.botToken ?? settingsRow?.slack_bot_token;
+		const appToken = tokens?.appToken ?? settingsRow?.slack_app_token;
+		const hasSlackTokens = appToken && botToken;
 		if (!hasSlackTokens) {
 			logger.info("Slack tokens not configured — skipping Slack bot startup");
 			return;
 		}
 
+		try {
+			await validateSlackTokens(botToken as string, appToken as string);
+		} catch (err) {
+			logger.warn({ err }, "Slack tokens failed validation");
+			throw new Error("Invalid Slack tokens");
+		}
+
+		if (slack) {
+			await slack.stop().catch((err) => logger.warn({ err }, "Failed to stop existing Slack bot"));
+			slack = null;
+		}
+
 		slack = new SlackBot({
-			appToken: settingsRow.slack_app_token as string,
-			botToken: settingsRow.slack_bot_token as string,
+			appToken: appToken as string,
+			botToken: botToken as string,
 			logger,
 		});
 		const slackBot = slack;
@@ -357,15 +390,26 @@ async function startSlackBotIfConfigured() {
 			});
 		});
 
-		await slackBot.start();
-		logger.info("Slack bot connected");
+		try {
+			await slackBot.start();
+			logger.info("Slack bot connected");
+		} catch (err) {
+			logger.error({ err }, "Failed to start Slack bot, disabling Slack integration");
+			slack = null;
+			throw new Error("Invalid Slack tokens");
+		}
+	} catch (err) {
+		if (tokens) {
+			throw err;
+		}
+		logger.warn({ err }, "Skipping Slack startup");
 	} finally {
 		slackStarting = false;
 	}
 }
 
 // Attempt Slack startup once on boot with any existing tokens
-await startSlackBotIfConfigured();
+await startSlackBotIfConfigured().catch(() => {});
 
 // 8. WhatsApp bot — always instantiate, connect only if creds exist in DB
 const whatsapp = new WhatsAppBot({ db, logger });
@@ -458,7 +502,10 @@ whatsapp.onMessage(async (message) => {
 const app = createApp(db, config, {
 	whatsapp,
 	getSlack: () => slack,
-	onSlackTokensUpdated: startSlackBotIfConfigured,
+	onSlackTokensUpdated: async (tokens) => {
+		if (!tokens) return;
+		await validateSlackTokens(tokens.botToken, tokens.appToken);
+	},
 });
 const server = serve({ fetch: app.fetch, port: config.PORT });
 logger.info({ port: config.PORT }, "HTTP server started");

@@ -109,6 +109,8 @@ describe("WhatsApp endpoints", () => {
 	describe("GET /api/whatsapp/pair", () => {
 		it("returns already_connected when bot is connected", async () => {
 			await seedAdmin(db);
+			const settings = createSettingsRepository(db);
+			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
 			const whatsapp = makeMockWhatsApp({ isConnected: true } as Partial<WhatsAppBot>);
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
@@ -122,6 +124,8 @@ describe("WhatsApp endpoints", () => {
 
 		it("returns QR string on successful pairing start", async () => {
 			await seedAdmin(db);
+			const settings = createSettingsRepository(db);
+			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
 			const whatsapp = makeMockWhatsApp({
 				startPairing: async (onQr: (qr: string) => void) => {
 					onQr("test-qr-string-data");
@@ -142,6 +146,8 @@ describe("WhatsApp endpoints", () => {
 	describe("GET /api/whatsapp/status", () => {
 		it("returns connected false when bot is disconnected", async () => {
 			await seedAdmin(db);
+			const settings = createSettingsRepository(db);
+			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
 			const whatsapp = makeMockWhatsApp({ isConnected: false } as Partial<WhatsAppBot>);
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
@@ -155,6 +161,8 @@ describe("WhatsApp endpoints", () => {
 
 		it("returns connected true when bot is connected", async () => {
 			await seedAdmin(db);
+			const settings = createSettingsRepository(db);
+			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
 			const whatsapp = makeMockWhatsApp({ isConnected: true } as Partial<WhatsAppBot>);
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
@@ -170,6 +178,8 @@ describe("WhatsApp endpoints", () => {
 	describe("endpoints absent without WhatsApp bot", () => {
 		it("returns 404 for /api/whatsapp/pair when no bot provided", async () => {
 			await seedAdmin(db);
+			const settings = createSettingsRepository(db);
+			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
 			const app = createApp(db, config);
 			const cookie = await loginAdmin(app);
 
@@ -179,6 +189,8 @@ describe("WhatsApp endpoints", () => {
 
 		it("returns 404 for /api/whatsapp/status when no bot provided", async () => {
 			await seedAdmin(db);
+			const settings = createSettingsRepository(db);
+			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
 			const app = createApp(db, config);
 			const cookie = await loginAdmin(app);
 
@@ -286,6 +298,8 @@ describe("Auth endpoints", () => {
 	describe("POST /api/auth/logout", () => {
 		it("clears session and returns authenticated false", async () => {
 			await seedAdmin(db);
+			const settings = createSettingsRepository(db);
+			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
 			const app = createApp(db, config);
 
 			const loginRes = await app.request("/api/auth/login", {
@@ -324,8 +338,10 @@ describe("Auth middleware", () => {
 		} catch {}
 	});
 
-	it("blocks protected routes without auth when admin exists", async () => {
+	it("blocks protected routes without auth when onboarding is complete", async () => {
 		await seedAdmin(db);
+		const settings = createSettingsRepository(db);
+		await settings.update({ onboardingCompletedAt: new Date().toISOString() });
 		const whatsapp = { isConnected: false, startPairing: async () => {} } as unknown as WhatsAppBot;
 		const app = createApp(db, config, { whatsapp });
 
@@ -333,8 +349,10 @@ describe("Auth middleware", () => {
 		expect(res.status).toBe(401);
 	});
 
-	it("allows protected routes with valid session", async () => {
+	it("allows protected routes with valid session when onboarding is complete", async () => {
 		await seedAdmin(db);
+		const settings = createSettingsRepository(db);
+		await settings.update({ onboardingCompletedAt: new Date().toISOString() });
 		const whatsapp = { isConnected: true } as unknown as WhatsAppBot;
 		const app = createApp(db, config, { whatsapp });
 
@@ -400,14 +418,24 @@ describe("Setup endpoints", () => {
 			expect(body.currentStep).toBe(0);
 		});
 
-		it("returns completed true after account creation", async () => {
+		it("returns completed false after account creation but before completion", async () => {
 			await seedAdmin(db);
 			const app = createApp(db, config);
 			const res = await app.request("/api/setup/status");
 			expect(res.status).toBe(200);
 			const body = await res.json();
+			expect(body.completed).toBe(false);
+		});
+
+		it("returns completed true after onboarding completion", async () => {
+			await seedAdmin(db);
+			const app = createApp(db, config);
+			await app.request("/api/setup/complete", { method: "POST" });
+
+			const res = await app.request("/api/setup/status");
+			expect(res.status).toBe(200);
+			const body = await res.json();
 			expect(body.completed).toBe(true);
-			expect(body.currentStep).toBe(1);
 		});
 	});
 
@@ -423,10 +451,10 @@ describe("Setup endpoints", () => {
 			const body = await res.json();
 			expect(body.success).toBe(true);
 
-			// Verify account was created
+			// Verify account was created but setup not yet completed
 			const statusRes = await app.request("/api/setup/status");
 			const status = await statusRes.json();
-			expect(status.completed).toBe(true);
+			expect(status.completed).toBe(false);
 		});
 
 		it("stores password hashed, not plaintext", async () => {
@@ -484,6 +512,60 @@ describe("Setup endpoints", () => {
 				body: JSON.stringify({}),
 			});
 			expect(res.status).toBe(400);
+		});
+	});
+
+	describe("POST /api/setup/slack", () => {
+		it("rejects invalid Slack tokens and does not persist them", async () => {
+			await seedAdmin(db);
+			const app = createApp(db, config, {
+				onSlackTokensUpdated: async () => {
+					throw new Error("invalid_auth");
+				},
+			});
+			const res = await app.request("/api/setup/slack", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					botToken: "xoxb-invalid",
+					appToken: "xapp-invalid",
+				}),
+			});
+
+			expect(res.status).toBe(400);
+			const body = await res.json();
+			expect(body.error.code).toBe("INVALID_SLACK_TOKENS");
+
+			const settings = createSettingsRepository(db);
+			const row = await settings.get();
+			expect(row?.slack_bot_token).toBeNull();
+			expect(row?.slack_app_token).toBeNull();
+		});
+
+		it("persists Slack tokens only after successful validation", async () => {
+			await seedAdmin(db);
+			let callbackCalled = false;
+			const app = createApp(db, config, {
+				onSlackTokensUpdated: async () => {
+					callbackCalled = true;
+				},
+			});
+			const res = await app.request("/api/setup/slack", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					botToken: "xoxb-valid-token",
+					appToken: "xapp-valid-token",
+				}),
+			});
+
+			expect(res.status).toBe(200);
+			expect(callbackCalled).toBe(true);
+
+			const settings = createSettingsRepository(db);
+			const row = await settings.get();
+			expect(row?.slack_bot_token).toBe("xoxb-valid-token");
+			expect(row?.slack_app_token).toBe("xapp-valid-token");
 		});
 	});
 });

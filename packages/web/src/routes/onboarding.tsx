@@ -130,7 +130,7 @@ function OnboardingPage() {
 			);
 			break;
 		default:
-			content = <StepCompletion data={onboardingData} onGoToDashboard={() => navigate({ to: "/login" })} />;
+			content = <StepCompletion data={onboardingData} onGoToDashboard={() => navigate({ to: "/channels" })} />;
 	}
 
 	return (
@@ -142,7 +142,7 @@ function OnboardingPage() {
 				<span className="text-lg font-semibold tracking-tight">Sketch</span>
 			</div>
 
-			<ProgressIndicator currentStep={Math.min(currentStep, 6)} />
+			{currentStep <= 6 && <ProgressIndicator currentStep={Math.min(currentStep, 6)} />}
 			{content}
 		</div>
 	);
@@ -158,7 +158,15 @@ export function CreateAccountStep({ onComplete }: { onComplete: () => void }) {
 
 	const createAccountMutation = useMutation({
 		mutationFn: () => api.setup.createAccount(email, password),
-		onSuccess: () => {
+		onSuccess: async () => {
+			try {
+				await api.auth.login(email, password);
+			} catch (error) {
+				const message =
+					error instanceof Error ? error.message : "Login failed. Please log in with your new credentials.";
+				toast.error(message);
+			}
+
 			toast.success("Admin account created");
 			onComplete();
 		},

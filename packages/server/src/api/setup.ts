@@ -54,7 +54,7 @@ const llmSchema = z.discriminatedUnion("provider", [
 type SettingsRepo = ReturnType<typeof createSettingsRepository>;
 
 interface SetupDeps {
-	onSlackTokensUpdated?: () => Promise<void>;
+	onSlackTokensUpdated?: (tokens?: { botToken: string; appToken: string }) => Promise<void>;
 }
 
 export function setupRoutes(settings: SettingsRepo, deps: SetupDeps = {}) {
@@ -63,9 +63,10 @@ export function setupRoutes(settings: SettingsRepo, deps: SetupDeps = {}) {
 	routes.get("/status", async (c) => {
 		const row = await settings.get();
 		const hasAdmin = Boolean(row?.admin_email);
+		const isCompleted = Boolean(row?.onboarding_completed_at);
 		return c.json({
-			completed: hasAdmin,
-			currentStep: hasAdmin ? 1 : 0,
+			completed: isCompleted,
+			currentStep: isCompleted ? 7 : hasAdmin ? 1 : 0,
 		});
 	});
 
@@ -128,13 +129,27 @@ export function setupRoutes(settings: SettingsRepo, deps: SetupDeps = {}) {
 			return c.json({ error: { code: "BAD_REQUEST", message } }, 400);
 		}
 
-		await settings.update({
-			slackBotToken: parsed.data.botToken.trim(),
-			slackAppToken: parsed.data.appToken.trim(),
-		});
+		const botToken = parsed.data.botToken.trim();
+		const appToken = parsed.data.appToken.trim();
 		if (deps.onSlackTokensUpdated) {
-			await deps.onSlackTokensUpdated();
+			try {
+				await deps.onSlackTokensUpdated({ botToken, appToken });
+			} catch {
+				return c.json(
+					{
+						error: {
+							code: "INVALID_SLACK_TOKENS",
+							message: "Invalid Slack tokens. Check Bot Token and App-Level Token, then try again.",
+						},
+					},
+					400,
+				);
+			}
 		}
+		await settings.update({
+			slackBotToken: botToken,
+			slackAppToken: appToken,
+		});
 
 		return c.json({ success: true });
 	});
@@ -172,6 +187,22 @@ export function setupRoutes(settings: SettingsRepo, deps: SetupDeps = {}) {
 				awsRegion: parsed.data.awsRegion.trim(),
 			});
 		}
+
+		return c.json({ success: true });
+	});
+
+	routes.post("/complete", async (c) => {
+		const existing = await settings.get();
+		if (!existing?.admin_email) {
+			return c.json(
+				{ error: { code: "SETUP_INCOMPLETE", message: "Admin account must be created before completing setup" } },
+				409,
+			);
+		}
+
+		await settings.update({
+			onboardingCompletedAt: new Date().toISOString(),
+		});
 
 		return c.json({ success: true });
 	});
