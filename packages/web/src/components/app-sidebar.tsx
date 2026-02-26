@@ -23,7 +23,7 @@ import { api } from "@/lib/api";
  * App sidebar — navigation, branding, and user actions.
  * Follows the designer's sidebar structure with Phosphor icons.
  */
-import { Brain, ChatCircle, Gear, LinkSimple, Moon, SignOut, Sparkle, Sun, UsersThree } from "@phosphor-icons/react";
+import { Brain, ChatCircle, Gear, LinkSimple, Moon, SignOut, Sparkle, Sun, UsersThree, CaretUpDownIcon } from "@phosphor-icons/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
@@ -70,7 +70,9 @@ export function AppSidebar({ email }: { email: string }) {
 							<div className="flex size-7 items-center justify-center rounded-md bg-primary">
 								<Sparkle size={14} weight="fill" className="text-primary-foreground" />
 							</div>
-							<span className="text-base font-semibold tracking-tight">Sketch</span>
+							<span className="text-base font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
+								Sketch
+							</span>
 						</SidebarMenuButton>
 					</SidebarMenuItem>
 				</SidebarMenu>
@@ -129,14 +131,18 @@ export function AppSidebar({ email }: { email: string }) {
 									<div className="flex size-7 items-center justify-center rounded-full bg-primary/15 text-xs font-medium text-primary">
 										{initials}
 									</div>
-									<div className="flex flex-col text-left text-xs leading-tight">
+									<div className="flex flex-col text-left text-xs leading-tight group-data-[collapsible=icon]:hidden">
 										<span className="font-medium">Admin</span>
 										<span className="text-muted-foreground">{email}</span>
 									</div>
+									<CaretUpDownIcon
+										size={16}
+										className="ml-auto text-muted-foreground group-data-[collapsible=icon]:hidden"
+									/>
 								</SidebarMenuButton>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent side="top" align="start" className="w-56">
-								<DropdownMenuItem onClick={toggleTheme}>
+								<DropdownMenuItem onSelect={toggleTheme}>
 									{theme === "dark" ? <Sun size={16} className="mr-2" /> : <Moon size={16} className="mr-2" />}
 									{theme === "dark" ? "Light mode" : "Dark mode"}
 								</DropdownMenuItem>
