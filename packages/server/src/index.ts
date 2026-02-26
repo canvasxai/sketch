@@ -14,10 +14,12 @@ import { createApp } from "./http";
 import { createLogger } from "./logger";
 import { QueueManager } from "./queue";
 import { SlackBot } from "./slack/bot";
+import { createSlackMessageHandler } from "./slack/message-handler";
 import type { BufferedMessage } from "./slack/thread-buffer";
 import { ThreadBuffer } from "./slack/thread-buffer";
 import { UserCache } from "./slack/user-cache";
 import { WhatsAppBot } from "./whatsapp/bot";
+import { createWhatsAppMessageHandler } from "./whatsapp/message-handler";
 
 // 1. Config
 const config = loadConfig();
@@ -116,6 +118,7 @@ if (hasSlack) {
 
 			// Post thinking indicator
 			const thinkingTs = await slackBot.postMessage(message.channelId, "_Thinking..._");
+			const onMessage = createSlackMessageHandler(slackBot, message.channelId, thinkingTs);
 
 			try {
 				const result = await runAgent({
@@ -124,6 +127,7 @@ if (hasSlack) {
 					userName: user.name,
 					logger,
 					platform: "slack",
+					onMessage,
 					attachments: attachments.length > 0 ? attachments : undefined,
 				});
 
@@ -135,7 +139,9 @@ if (hasSlack) {
 					}
 				}
 
-				await slackBot.updateMessage(message.channelId, thinkingTs, result.text ?? "_No response_");
+				if (!result.messageSent) {
+					await slackBot.updateMessage(message.channelId, thinkingTs, "_No response_");
+				}
 			} catch (err) {
 				logger.error({ err, userId: user.id }, "Agent run failed");
 				await slackBot.updateMessage(message.channelId, thinkingTs, "_Something went wrong, try again_");
@@ -292,6 +298,7 @@ if (hasSlack) {
 			}
 
 			const thinkingTs = await slackBot.postThreadReply(message.channelId, threadTs, "_Thinking..._");
+			const onMessage = createSlackMessageHandler(slackBot, message.channelId, thinkingTs, threadTs);
 
 			try {
 				const result = await runAgent({
@@ -300,6 +307,7 @@ if (hasSlack) {
 					userName: user.name,
 					logger,
 					platform: "slack",
+					onMessage,
 					threadTs,
 					attachments: attachments.length > 0 ? attachments : undefined,
 					channelContext: {
@@ -316,7 +324,9 @@ if (hasSlack) {
 					}
 				}
 
-				await slackBot.updateMessage(message.channelId, thinkingTs, result.text ?? "_No response_");
+				if (!result.messageSent) {
+					await slackBot.updateMessage(message.channelId, thinkingTs, "_No response_");
+				}
 			} catch (err) {
 				logger.error({ err, userId: user.id, channelId: message.channelId }, "Agent run failed");
 				await slackBot.updateMessage(message.channelId, thinkingTs, "_Something went wrong, try again_");
@@ -370,17 +380,20 @@ whatsapp.onMessage(async (message) => {
 				}
 			}
 
+			const { onMessage, isReactionRemoved } = createWhatsAppMessageHandler(whatsapp, message.jid, msgKey);
+
 			const result = await runAgent({
 				userMessage: message.text || "See attached files.",
 				workspaceDir,
 				userName: user.name,
 				logger,
 				platform: "whatsapp",
+				onMessage,
 				attachments: attachments.length > 0 ? attachments : undefined,
 			});
 
-			// Remove thinking reaction
-			if (whatsapp.isConnected) {
+			// Remove thinking reaction if no messages were sent
+			if (!isReactionRemoved() && whatsapp.isConnected) {
 				await whatsapp.removeReaction(message.jid, msgKey);
 			}
 
@@ -395,11 +408,6 @@ whatsapp.onMessage(async (message) => {
 				} catch (err) {
 					logger.warn({ err, filePath }, "Failed to send file via WhatsApp");
 				}
-			}
-
-			// Send response
-			if (result.text && whatsapp.isConnected) {
-				await whatsapp.sendText(message.jid, result.text);
 			}
 		} catch (err) {
 			logger.error({ err, userId: user.id }, "Agent run failed (WhatsApp)");

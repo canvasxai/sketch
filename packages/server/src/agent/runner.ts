@@ -18,7 +18,7 @@ import { getSessionId, saveSessionId } from "./sessions";
 import { UploadCollector, createUploadMcpServer } from "./upload-tool";
 
 export interface AgentResult {
-	text: string | null;
+	messageSent: boolean;
 	sessionId: string;
 	costUsd: number;
 	pendingUploads: string[];
@@ -30,12 +30,38 @@ export interface RunAgentParams {
 	userName: string;
 	logger: Logger;
 	platform: "slack" | "whatsapp";
+	onMessage: (text: string) => Promise<void>;
 	attachments?: Attachment[];
 	threadTs?: string;
 	channelContext?: {
 		channelName: string;
 		recentMessages: Array<{ userName: string; text: string }>;
 	};
+}
+
+/**
+ * Extracts text content from an SDK assistant message. Returns null if the
+ * message isn't an assistant message, has no text blocks, or text is only
+ * whitespace. Multiple text blocks (rare) are concatenated with newlines.
+ */
+export function extractAssistantText(message: unknown): string | null {
+	if (!message || typeof message !== "object") return null;
+	const msg = message as Record<string, unknown>;
+	if (msg.type !== "assistant") return null;
+
+	const inner = msg.message as Record<string, unknown> | undefined;
+	const content = inner?.content;
+	if (!Array.isArray(content)) return null;
+
+	const texts: string[] = [];
+	for (const block of content) {
+		if (block && typeof block === "object" && block.type === "text" && typeof block.text === "string") {
+			texts.push(block.text);
+		}
+	}
+
+	const joined = texts.join("\n");
+	return joined.trim() ? joined : null;
 }
 
 export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
@@ -51,7 +77,7 @@ export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
 	});
 
 	let sessionId = "";
-	let resultText: string | null = null;
+	let messageSent = false;
 	let costUsd = 0;
 
 	const attachments = params.attachments ?? [];
@@ -93,6 +119,7 @@ export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
 	const run = query({
 		prompt,
 		options: {
+			maxTurns: 100,
 			cwd: workspaceDir,
 			resume: existingSessionId,
 			systemPrompt: {
@@ -116,12 +143,19 @@ export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
 			sessionId = message.session_id;
 		}
 
+		const text = extractAssistantText(message);
+		if (text) {
+			try {
+				await params.onMessage(text);
+				messageSent = true;
+			} catch (err) {
+				logger.warn({ err }, "Failed to deliver assistant message");
+			}
+		}
+
 		if (message.type === "result") {
 			sessionId = message.session_id;
 			costUsd = message.total_cost_usd;
-			if ("result" in message && typeof message.result === "string") {
-				resultText = message.result;
-			}
 		}
 	}
 
@@ -132,5 +166,5 @@ export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
 	const pendingUploads = uploadCollector.drain();
 	logger.info({ userId: userName, sessionId, costUsd, pendingUploads: pendingUploads.length }, "Agent run completed");
 
-	return { text: resultText, sessionId, costUsd, pendingUploads };
+	return { messageSent, sessionId, costUsd, pendingUploads };
 }
