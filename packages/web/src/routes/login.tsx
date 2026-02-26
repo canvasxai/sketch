@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { Eye, EyeSlash, Sparkle } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
-import { createRoute, useNavigate } from "@tanstack/react-router";
+import { createRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { rootRoute } from "./root";
@@ -13,6 +13,12 @@ import { rootRoute } from "./root";
 export const loginRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/login",
+	beforeLoad: async () => {
+		const status = await api.setup.status();
+		if (!status.completed) {
+			throw redirect({ to: "/onboarding" });
+		}
+	},
 	component: LoginPage,
 });
 

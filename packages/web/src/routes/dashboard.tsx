@@ -1,14 +1,21 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { api } from "@/lib/api";
 import { Outlet, createRoute, redirect, useRouteContext } from "@tanstack/react-router";
 import { rootRoute } from "./root";
 
 /**
- * Auth guard: checks session before rendering any dashboard route.
- * Uses direct fetch (not a query hook) because beforeLoad runs before render.
+ * Auth guard: checks setup status first, then session.
+ * If setup not complete → /onboarding.
+ * If not authenticated → /login.
  */
 async function checkAuth() {
+	const status = await api.setup.status();
+	if (!status.completed) {
+		throw redirect({ to: "/onboarding" });
+	}
+
 	const res = await fetch("/api/auth/session");
 	const data = (await res.json()) as { authenticated: boolean; email?: string };
 	if (!data.authenticated) {

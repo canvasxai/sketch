@@ -1,12 +1,13 @@
 /**
- * Admin auth routes — env-based credentials, in-memory session store.
+ * Admin auth routes — DB-backed credentials, in-memory session store.
  * Sessions are lost on server restart; admin simply re-logs in.
  * Cookie-based with httpOnly, sameSite=lax, 7-day sliding expiry.
  */
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import type { Config } from "../config";
+import { verifyPassword } from "../auth/password";
+import type { createSettingsRepository } from "../db/repositories/settings";
 
 const SESSION_COOKIE = "sketch_session";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -32,12 +33,15 @@ function setSessionCookie(c: Parameters<typeof setCookie>[0], token: string, sec
 	});
 }
 
-export function authRoutes(config: Config) {
+type SettingsRepo = ReturnType<typeof createSettingsRepository>;
+
+export function authRoutes(settings: SettingsRepo) {
 	const routes = new Hono();
 
 	routes.post("/login", async (c) => {
-		if (!config.ADMIN_EMAIL || !config.ADMIN_PASSWORD) {
-			return c.json({ error: { code: "AUTH_DISABLED", message: "Admin auth not configured" } }, 503);
+		const row = await settings.get();
+		if (!row?.admin_email || !row?.admin_password_hash) {
+			return c.json({ error: { code: "SETUP_REQUIRED", message: "Admin account not configured" } }, 503);
 		}
 
 		const body = (await c.req.json().catch(() => ({}))) as { email?: string; password?: string };
@@ -45,22 +49,18 @@ export function authRoutes(config: Config) {
 			return c.json({ error: { code: "BAD_REQUEST", message: "Email and password required" } }, 400);
 		}
 
-		const emailMatch =
-			body.email.length === config.ADMIN_EMAIL.length &&
-			timingSafeEqual(Buffer.from(body.email), Buffer.from(config.ADMIN_EMAIL));
-		const passwordMatch =
-			body.password.length === config.ADMIN_PASSWORD.length &&
-			timingSafeEqual(Buffer.from(body.password), Buffer.from(config.ADMIN_PASSWORD));
+		const emailMatch = body.email.toLowerCase() === row.admin_email.toLowerCase();
+		const passwordMatch = emailMatch && (await verifyPassword(body.password, row.admin_password_hash));
 
 		if (!emailMatch || !passwordMatch) {
 			return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid credentials" } }, 401);
 		}
 
 		const token = randomBytes(32).toString("hex");
-		sessions.set(token, { email: config.ADMIN_EMAIL, expiresAt: Date.now() + SESSION_TTL_MS });
+		sessions.set(token, { email: row.admin_email, expiresAt: Date.now() + SESSION_TTL_MS });
 
 		setSessionCookie(c, token, isSecure(c));
-		return c.json({ authenticated: true, email: config.ADMIN_EMAIL });
+		return c.json({ authenticated: true, email: row.admin_email });
 	});
 
 	routes.post("/logout", (c) => {
@@ -95,10 +95,6 @@ export function authRoutes(config: Config) {
 	return routes;
 }
 
-/**
- * Validates the session cookie and returns the session if valid.
- * Used by the auth middleware to check auth state.
- */
 export function validateSession(token: string): Session | null {
 	const session = sessions.get(token);
 	if (!session || session.expiresAt < Date.now()) {

@@ -31,6 +31,17 @@ export interface ChannelStatus {
 }
 
 export const api = {
+	setup: {
+		status() {
+			return request<{ completed: boolean; currentStep: number }>("/api/setup/status");
+		},
+		createAccount(email: string, password: string) {
+			return request<{ success: boolean }>("/api/setup/account", {
+				method: "POST",
+				body: JSON.stringify({ email, password }),
+			});
+		},
+	},
 	auth: {
 		login(email: string, password: string) {
 			return request<{ authenticated: boolean; email: string }>("/api/auth/login", {

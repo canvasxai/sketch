@@ -1,12 +1,21 @@
 import type { Kysely } from "kysely";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { clearSessions } from "./api/auth";
+import { hashPassword } from "./auth/password";
+import { createSettingsRepository } from "./db/repositories/settings";
 import type { DB } from "./db/schema";
 import { createApp } from "./http";
 import { createTestConfig, createTestDb } from "./test-utils";
 import type { WhatsAppBot } from "./whatsapp/bot";
 
 const config = createTestConfig();
+
+/** Helper to insert an admin account into the settings table. */
+async function seedAdmin(db: Kysely<DB>, email = "admin@test.com", password = "testpassword123") {
+	const settings = createSettingsRepository(db);
+	const hash = await hashPassword(password);
+	await settings.create({ adminEmail: email, adminPasswordHash: hash });
+}
 
 describe("HTTP health endpoint", () => {
 	let db: Kysely<DB>;
@@ -59,7 +68,8 @@ describe("HTTP health endpoint", () => {
 		it("returns 404 for unknown /api/* routes", async () => {
 			const app = createApp(db, config);
 			const res = await app.request("/api/nonexistent");
-			expect(res.status).toBe(404);
+			// Without admin setup, returns 503 (setup required); with setup, 404
+			expect([404, 503]).toContain(res.status);
 		});
 	});
 });
@@ -69,6 +79,7 @@ describe("WhatsApp endpoints", () => {
 
 	beforeEach(async () => {
 		db = await createTestDb();
+		clearSessions();
 	});
 
 	afterEach(async () => {
@@ -85,12 +96,24 @@ describe("WhatsApp endpoints", () => {
 		} as WhatsAppBot;
 	}
 
+	/** Login and return the session cookie string. */
+	async function loginAdmin(app: ReturnType<typeof createApp>) {
+		const res = await app.request("/api/auth/login", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ email: "admin@test.com", password: "testpassword123" }),
+		});
+		return res.headers.get("set-cookie") ?? "";
+	}
+
 	describe("GET /api/whatsapp/pair", () => {
 		it("returns already_connected when bot is connected", async () => {
+			await seedAdmin(db);
 			const whatsapp = makeMockWhatsApp({ isConnected: true } as Partial<WhatsAppBot>);
 			const app = createApp(db, config, { whatsapp });
+			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp/pair");
+			const res = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
 			expect(res.status).toBe(200);
 
 			const body = await res.json();
@@ -98,14 +121,16 @@ describe("WhatsApp endpoints", () => {
 		});
 
 		it("returns QR string on successful pairing start", async () => {
+			await seedAdmin(db);
 			const whatsapp = makeMockWhatsApp({
 				startPairing: async (onQr: (qr: string) => void) => {
 					onQr("test-qr-string-data");
 				},
 			} as Partial<WhatsAppBot>);
 			const app = createApp(db, config, { whatsapp });
+			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp/pair");
+			const res = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
 			expect(res.status).toBe(200);
 
 			const body = await res.json();
@@ -116,10 +141,12 @@ describe("WhatsApp endpoints", () => {
 
 	describe("GET /api/whatsapp/status", () => {
 		it("returns connected false when bot is disconnected", async () => {
+			await seedAdmin(db);
 			const whatsapp = makeMockWhatsApp({ isConnected: false } as Partial<WhatsAppBot>);
 			const app = createApp(db, config, { whatsapp });
+			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp/status");
+			const res = await app.request("/api/whatsapp/status", { headers: { Cookie: cookie } });
 			expect(res.status).toBe(200);
 
 			const body = await res.json();
@@ -127,10 +154,12 @@ describe("WhatsApp endpoints", () => {
 		});
 
 		it("returns connected true when bot is connected", async () => {
+			await seedAdmin(db);
 			const whatsapp = makeMockWhatsApp({ isConnected: true } as Partial<WhatsAppBot>);
 			const app = createApp(db, config, { whatsapp });
+			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp/status");
+			const res = await app.request("/api/whatsapp/status", { headers: { Cookie: cookie } });
 			expect(res.status).toBe(200);
 
 			const body = await res.json();
@@ -140,14 +169,20 @@ describe("WhatsApp endpoints", () => {
 
 	describe("endpoints absent without WhatsApp bot", () => {
 		it("returns 404 for /api/whatsapp/pair when no bot provided", async () => {
+			await seedAdmin(db);
 			const app = createApp(db, config);
-			const res = await app.request("/api/whatsapp/pair");
+			const cookie = await loginAdmin(app);
+
+			const res = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
 			expect(res.status).toBe(404);
 		});
 
 		it("returns 404 for /api/whatsapp/status when no bot provided", async () => {
+			await seedAdmin(db);
 			const app = createApp(db, config);
-			const res = await app.request("/api/whatsapp/status");
+			const cookie = await loginAdmin(app);
+
+			const res = await app.request("/api/whatsapp/status", { headers: { Cookie: cookie } });
 			expect(res.status).toBe(404);
 		});
 	});
@@ -155,10 +190,6 @@ describe("WhatsApp endpoints", () => {
 
 describe("Auth endpoints", () => {
 	let db: Kysely<DB>;
-	const authConfig = createTestConfig({
-		ADMIN_EMAIL: "admin@test.com",
-		ADMIN_PASSWORD: "testpassword123",
-	});
 
 	beforeEach(async () => {
 		db = await createTestDb();
@@ -173,7 +204,8 @@ describe("Auth endpoints", () => {
 
 	describe("POST /api/auth/login", () => {
 		it("returns 401 with invalid credentials", async () => {
-			const app = createApp(db, authConfig);
+			await seedAdmin(db);
+			const app = createApp(db, config);
 			const res = await app.request("/api/auth/login", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -185,7 +217,8 @@ describe("Auth endpoints", () => {
 		});
 
 		it("returns 200 with valid credentials and sets cookie", async () => {
-			const app = createApp(db, authConfig);
+			await seedAdmin(db);
+			const app = createApp(db, config);
 			const res = await app.request("/api/auth/login", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -199,7 +232,8 @@ describe("Auth endpoints", () => {
 		});
 
 		it("returns 400 when email or password missing", async () => {
-			const app = createApp(db, authConfig);
+			await seedAdmin(db);
+			const app = createApp(db, config);
 			const res = await app.request("/api/auth/login", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -208,12 +242,12 @@ describe("Auth endpoints", () => {
 			expect(res.status).toBe(400);
 		});
 
-		it("returns 503 when admin auth not configured", async () => {
+		it("returns 503 when no admin account exists", async () => {
 			const app = createApp(db, config);
 			const res = await app.request("/api/auth/login", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ email: "a@b.com", password: "test" }),
+				body: JSON.stringify({ email: "a@b.com", password: "testtest" }),
 			});
 			expect(res.status).toBe(503);
 		});
@@ -221,7 +255,7 @@ describe("Auth endpoints", () => {
 
 	describe("GET /api/auth/session", () => {
 		it("returns authenticated false when no cookie", async () => {
-			const app = createApp(db, authConfig);
+			const app = createApp(db, config);
 			const res = await app.request("/api/auth/session");
 			expect(res.status).toBe(200);
 			const body = await res.json();
@@ -229,9 +263,9 @@ describe("Auth endpoints", () => {
 		});
 
 		it("returns authenticated true with valid session", async () => {
-			const app = createApp(db, authConfig);
+			await seedAdmin(db);
+			const app = createApp(db, config);
 
-			// Login first
 			const loginRes = await app.request("/api/auth/login", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -239,7 +273,6 @@ describe("Auth endpoints", () => {
 			});
 			const cookie = loginRes.headers.get("set-cookie") ?? "";
 
-			// Check session
 			const res = await app.request("/api/auth/session", {
 				headers: { Cookie: cookie },
 			});
@@ -252,9 +285,9 @@ describe("Auth endpoints", () => {
 
 	describe("POST /api/auth/logout", () => {
 		it("clears session and returns authenticated false", async () => {
-			const app = createApp(db, authConfig);
+			await seedAdmin(db);
+			const app = createApp(db, config);
 
-			// Login
 			const loginRes = await app.request("/api/auth/login", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -262,14 +295,12 @@ describe("Auth endpoints", () => {
 			});
 			const cookie = loginRes.headers.get("set-cookie") ?? "";
 
-			// Logout
 			const logoutRes = await app.request("/api/auth/logout", {
 				method: "POST",
 				headers: { Cookie: cookie },
 			});
 			expect(logoutRes.status).toBe(200);
 
-			// Session should be invalid now
 			const sessionRes = await app.request("/api/auth/session", {
 				headers: { Cookie: cookie },
 			});
@@ -277,44 +308,182 @@ describe("Auth endpoints", () => {
 			expect(body.authenticated).toBe(false);
 		});
 	});
+});
 
-	describe("Auth middleware", () => {
-		it("blocks protected routes without auth", async () => {
-			const whatsapp = {
-				isConnected: false,
-				startPairing: async () => {},
-			} as unknown as WhatsAppBot;
-			const app = createApp(db, authConfig, { whatsapp });
+describe("Auth middleware", () => {
+	let db: Kysely<DB>;
 
-			const res = await app.request("/api/whatsapp/status");
-			expect(res.status).toBe(401);
+	beforeEach(async () => {
+		db = await createTestDb();
+		clearSessions();
+	});
+
+	afterEach(async () => {
+		try {
+			await db.destroy();
+		} catch {}
+	});
+
+	it("blocks protected routes without auth when admin exists", async () => {
+		await seedAdmin(db);
+		const whatsapp = { isConnected: false, startPairing: async () => {} } as unknown as WhatsAppBot;
+		const app = createApp(db, config, { whatsapp });
+
+		const res = await app.request("/api/whatsapp/status");
+		expect(res.status).toBe(401);
+	});
+
+	it("allows protected routes with valid session", async () => {
+		await seedAdmin(db);
+		const whatsapp = { isConnected: true } as unknown as WhatsAppBot;
+		const app = createApp(db, config, { whatsapp });
+
+		const loginRes = await app.request("/api/auth/login", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ email: "admin@test.com", password: "testpassword123" }),
+		});
+		const cookie = loginRes.headers.get("set-cookie") ?? "";
+
+		const res = await app.request("/api/whatsapp/status", {
+			headers: { Cookie: cookie },
+		});
+		expect(res.status).toBe(200);
+	});
+
+	it("allows /api/health without auth", async () => {
+		await seedAdmin(db);
+		const app = createApp(db, config);
+		const res = await app.request("/api/health");
+		expect(res.status).toBe(200);
+	});
+
+	it("returns 503 for protected routes when setup incomplete", async () => {
+		const whatsapp = { isConnected: false } as unknown as WhatsAppBot;
+		const app = createApp(db, config, { whatsapp });
+
+		const res = await app.request("/api/whatsapp/status");
+		expect(res.status).toBe(503);
+		const body = await res.json();
+		expect(body.error.code).toBe("SETUP_REQUIRED");
+	});
+
+	it("allows /api/setup/* routes when setup incomplete", async () => {
+		const app = createApp(db, config);
+		const res = await app.request("/api/setup/status");
+		expect(res.status).toBe(200);
+		const body = await res.json();
+		expect(body.completed).toBe(false);
+	});
+});
+
+describe("Setup endpoints", () => {
+	let db: Kysely<DB>;
+
+	beforeEach(async () => {
+		db = await createTestDb();
+	});
+
+	afterEach(async () => {
+		try {
+			await db.destroy();
+		} catch {}
+	});
+
+	describe("GET /api/setup/status", () => {
+		it("returns completed false when no settings", async () => {
+			const app = createApp(db, config);
+			const res = await app.request("/api/setup/status");
+			expect(res.status).toBe(200);
+			const body = await res.json();
+			expect(body.completed).toBe(false);
+			expect(body.currentStep).toBe(0);
 		});
 
-		it("allows protected routes with valid session", async () => {
-			const whatsapp = {
-				isConnected: true,
-			} as unknown as WhatsAppBot;
-			const app = createApp(db, authConfig, { whatsapp });
+		it("returns completed true after account creation", async () => {
+			await seedAdmin(db);
+			const app = createApp(db, config);
+			const res = await app.request("/api/setup/status");
+			expect(res.status).toBe(200);
+			const body = await res.json();
+			expect(body.completed).toBe(true);
+			expect(body.currentStep).toBe(1);
+		});
+	});
 
-			// Login
-			const loginRes = await app.request("/api/auth/login", {
+	describe("POST /api/setup/account", () => {
+		it("creates admin account and returns success", async () => {
+			const app = createApp(db, config);
+			const res = await app.request("/api/setup/account", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ email: "admin@test.com", password: "testpassword123" }),
-			});
-			const cookie = loginRes.headers.get("set-cookie") ?? "";
-
-			// Access protected route
-			const res = await app.request("/api/whatsapp/status", {
-				headers: { Cookie: cookie },
+				body: JSON.stringify({ email: "admin@new.com", password: "securepass123" }),
 			});
 			expect(res.status).toBe(200);
+			const body = await res.json();
+			expect(body.success).toBe(true);
+
+			// Verify account was created
+			const statusRes = await app.request("/api/setup/status");
+			const status = await statusRes.json();
+			expect(status.completed).toBe(true);
 		});
 
-		it("allows /api/health without auth", async () => {
-			const app = createApp(db, authConfig);
-			const res = await app.request("/api/health");
-			expect(res.status).toBe(200);
+		it("stores password hashed, not plaintext", async () => {
+			const app = createApp(db, config);
+			await app.request("/api/setup/account", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ email: "admin@new.com", password: "securepass123" }),
+			});
+
+			const settings = createSettingsRepository(db);
+			const row = await settings.get();
+			expect(row?.admin_password_hash).not.toBe("securepass123");
+			expect(row?.admin_password_hash).toContain(":");
+		});
+
+		it("rejects if admin already exists", async () => {
+			await seedAdmin(db);
+			const app = createApp(db, config);
+			const res = await app.request("/api/setup/account", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ email: "another@admin.com", password: "securepass123" }),
+			});
+			expect(res.status).toBe(409);
+			const body = await res.json();
+			expect(body.error.code).toBe("CONFLICT");
+		});
+
+		it("rejects invalid email", async () => {
+			const app = createApp(db, config);
+			const res = await app.request("/api/setup/account", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ email: "notanemail", password: "securepass123" }),
+			});
+			expect(res.status).toBe(400);
+		});
+
+		it("rejects short password", async () => {
+			const app = createApp(db, config);
+			const res = await app.request("/api/setup/account", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ email: "admin@new.com", password: "short" }),
+			});
+			expect(res.status).toBe(400);
+		});
+
+		it("rejects missing fields", async () => {
+			const app = createApp(db, config);
+			const res = await app.request("/api/setup/account", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({}),
+			});
+			expect(res.status).toBe(400);
 		});
 	});
 });
