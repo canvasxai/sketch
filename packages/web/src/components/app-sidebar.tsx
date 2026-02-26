@@ -23,7 +23,7 @@ import { api } from "@/lib/api";
  * App sidebar — navigation, branding, and user actions.
  * Follows the designer's sidebar structure with Phosphor icons.
  */
-import { Brain, ChatCircle, Gear, LinkSimple, Moon, SignOut, Sparkle, Sun, UsersThree, CaretUpDownIcon } from "@phosphor-icons/react";
+import { BrainIcon, ChatCircleIcon, GearIcon, LinkSimpleIcon, MoonIcon, SignOutIcon, SparkleIcon, SunIcon, UsersThreeIcon, CaretUpDownIcon } from "@phosphor-icons/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
@@ -35,14 +35,14 @@ interface NavItem {
 }
 
 const primaryNav: NavItem[] = [
-	{ label: "Channels", icon: <ChatCircle size={18} />, href: "/channels" },
-	{ label: "Team", icon: <UsersThree size={18} />, href: "/team", disabled: true },
-	{ label: "Skills", icon: <Brain size={18} />, href: "/skills", disabled: true },
+	{ label: "Channels", icon: <ChatCircleIcon size={18} />, href: "/channels" },
+	{ label: "Team", icon: <UsersThreeIcon size={18} />, href: "/team", disabled: true },
+	{ label: "Skills", icon: <BrainIcon size={18} />, href: "/skills", disabled: true },
 ];
 
 const adminNav: NavItem[] = [
-	{ label: "Integrations", icon: <LinkSimple size={18} />, href: "/integrations", disabled: true },
-	{ label: "Settings", icon: <Gear size={18} />, href: "/settings", disabled: true },
+	{ label: "Integrations", icon: <LinkSimpleIcon size={18} />, href: "/integrations", disabled: true },
+	{ label: "Settings", icon: <GearIcon size={18} />, href: "/settings", disabled: true },
 ];
 
 export function AppSidebar({ email }: { email: string }) {
@@ -68,7 +68,7 @@ export function AppSidebar({ email }: { email: string }) {
 					<SidebarMenuItem>
 						<SidebarMenuButton size="lg" className="pointer-events-none">
 							<div className="flex size-7 items-center justify-center rounded-md bg-primary">
-								<Sparkle size={14} weight="fill" className="text-primary-foreground" />
+								<SparkleIcon size={14} weight="fill" className="text-primary-foreground" />
 							</div>
 							<span className="text-base font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
 								Sketch
@@ -143,12 +143,12 @@ export function AppSidebar({ email }: { email: string }) {
 							</DropdownMenuTrigger>
 							<DropdownMenuContent side="top" align="start" className="w-56">
 								<DropdownMenuItem onSelect={toggleTheme}>
-									{theme === "dark" ? <Sun size={16} className="mr-2" /> : <Moon size={16} className="mr-2" />}
+									{theme === "dark" ? <SunIcon size={16} className="mr-2" /> : <MoonIcon size={16} className="mr-2" />}
 									{theme === "dark" ? "Light mode" : "Dark mode"}
 								</DropdownMenuItem>
 								<DropdownMenuSeparator />
 								<DropdownMenuItem onClick={() => logoutMutation.mutate()}>
-									<SignOut size={16} className="mr-2" />
+									<SignOutIcon size={16} className="mr-2" />
 									Log out
 								</DropdownMenuItem>
 							</DropdownMenuContent>

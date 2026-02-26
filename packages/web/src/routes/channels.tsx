@@ -23,7 +23,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ChannelStatus } from "@/lib/api";
 import { api } from "@/lib/api";
-import { Check, DotsThree, SlackLogo, Warning, WhatsappLogo, XCircle } from "@phosphor-icons/react";
+import { CheckIcon, DotsThreeIcon, SlackLogoIcon, WarningIcon, WhatsappLogoIcon, XCircleIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { createRoute } from "@tanstack/react-router";
 import { useState } from "react";
@@ -78,7 +78,7 @@ function SlackCard({ channel }: { channel: ChannelStatus }) {
 			<div className="flex items-center justify-between">
 				<div className="flex items-center gap-3">
 					<div className="flex size-9 items-center justify-center rounded-full bg-muted">
-						<SlackLogo size={20} />
+						<SlackLogoIcon size={20} />
 					</div>
 					<span className="text-sm font-medium">Slack</span>
 				</div>
@@ -86,7 +86,7 @@ function SlackCard({ channel }: { channel: ChannelStatus }) {
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
 							<Button variant="ghost" size="icon" className="size-7">
-								<DotsThree size={16} />
+								<DotsThreeIcon size={16} />
 							</Button>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end">
@@ -99,7 +99,7 @@ function SlackCard({ channel }: { channel: ChannelStatus }) {
 			<div className="ml-12 mt-2">
 				{isConfigured ? (
 					<div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-						<Check size={14} className="text-success" />
+						<CheckIcon size={14} className="text-success" />
 						<span>Configured</span>
 					</div>
 				) : (
@@ -133,7 +133,7 @@ function WhatsAppCard({ channel }: { channel: ChannelStatus }) {
 				<div className="flex items-center justify-between">
 					<div className="flex items-center gap-3">
 						<div className="flex size-9 items-center justify-center rounded-full bg-muted">
-							<WhatsappLogo size={20} />
+							<WhatsappLogoIcon size={20} />
 						</div>
 						<span className="text-sm font-medium">WhatsApp</span>
 					</div>
@@ -152,7 +152,7 @@ function WhatsAppCard({ channel }: { channel: ChannelStatus }) {
 							<DropdownMenu>
 								<DropdownMenuTrigger asChild>
 									<Button variant="ghost" size="icon" className="size-7">
-										<DotsThree size={16} />
+										<DotsThreeIcon size={16} />
 									</Button>
 								</DropdownMenuTrigger>
 								<DropdownMenuContent align="end">
@@ -169,13 +169,13 @@ function WhatsAppCard({ channel }: { channel: ChannelStatus }) {
 				<div className="ml-12 mt-2">
 					{isConnected && (
 						<div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-							<Check size={14} className="text-success" />
+							<CheckIcon size={14} className="text-success" />
 							<span>Connected</span>
 						</div>
 					)}
 					{isDisconnected && (
 						<div className="flex items-center gap-1.5 text-xs text-warning">
-							<Warning size={14} />
+							<WarningIcon size={14} />
 							<span>Disconnected</span>
 						</div>
 					)}
@@ -229,7 +229,7 @@ function WhatsAppPairDialog({ open, onOpenChange }: { open: boolean; onOpenChang
 					{isLoading && <div className="text-sm text-muted-foreground">Generating QR code...</div>}
 					{error && (
 						<div className="flex items-center gap-2 text-sm text-destructive">
-							<XCircle size={16} />
+							<XCircleIcon size={16} />
 							<span>Failed to generate QR code</span>
 						</div>
 					)}
@@ -244,7 +244,7 @@ function WhatsAppPairDialog({ open, onOpenChange }: { open: boolean; onOpenChang
 					)}
 					{data?.status === "already_connected" && (
 						<div className="flex items-center gap-2 text-sm text-success">
-							<Check size={16} />
+							<CheckIcon size={16} />
 							<span>Already connected</span>
 						</div>
 					)}

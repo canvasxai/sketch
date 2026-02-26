@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
-import { Eye, EyeSlash, Sparkle } from "@phosphor-icons/react";
+import { EyeIcon, EyeSlashIcon, SparkleIcon } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
 import { createRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
@@ -47,7 +47,7 @@ function LoginPage() {
 		<div className="flex min-h-screen flex-col items-center justify-center px-4 py-8">
 			<div className="mb-8 flex flex-col items-center gap-2">
 				<div className="flex size-8 items-center justify-center rounded-md bg-primary">
-					<Sparkle size={18} weight="fill" className="text-primary-foreground" />
+					<SparkleIcon size={18} weight="fill" className="text-primary-foreground" />
 				</div>
 				<span className="text-lg font-semibold tracking-tight">Sketch</span>
 			</div>
@@ -88,7 +88,7 @@ function LoginPage() {
 									className="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
 									onClick={() => setShowPassword(!showPassword)}
 								>
-									{showPassword ? <EyeSlash size={16} /> : <Eye size={16} />}
+									{showPassword ? <EyeSlashIcon size={16} /> : <EyeIcon size={16} />}
 								</Button>
 							</div>
 						</div>
