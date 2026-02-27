@@ -1,5 +1,6 @@
 import { basename, join } from "node:path";
 import { serve } from "@hono/node-server";
+import { applyLlmEnvFromSettings } from "./agent/llm-env";
 import { formatBufferedContext } from "./agent/prompt";
 import { runAgent } from "./agent/runner";
 import { getSessionId } from "./agent/sessions";
@@ -38,6 +39,14 @@ logger.info("Database ready");
 const users = createUserRepository(db);
 const channels = createChannelRepository(db);
 const settingsRepo = createSettingsRepository(db);
+
+async function applyLlmEnvFromDb() {
+	const settingsRow = await settingsRepo.get();
+	applyLlmEnvFromSettings(settingsRow, logger);
+}
+
+// Apply LLM configuration from DB (if present) so agent runs use DB-stored settings.
+await applyLlmEnvFromDb();
 
 // 5. Queue manager
 const queueManager = new QueueManager();
@@ -504,7 +513,10 @@ const app = createApp(db, config, {
 	getSlack: () => slack,
 	onSlackTokensUpdated: async (tokens) => {
 		if (!tokens) return;
-		await validateSlackTokens(tokens.botToken, tokens.appToken);
+		await startSlackBotIfConfigured(tokens);
+	},
+	onLlmSettingsUpdated: async () => {
+		await applyLlmEnvFromDb();
 	},
 });
 const server = serve({ fetch: app.fetch, port: config.PORT });

@@ -1,6 +1,6 @@
 /**
  * Channels page — displays Slack and WhatsApp platform cards with connection status.
- * Slack shows configured/not-configured only. WhatsApp shows real connection state.
+ * Slack and WhatsApp both show real connection state when available.
  */
 import {
 	AlertDialog,
@@ -77,6 +77,7 @@ function PlatformCard({ channel }: { channel: ChannelStatus }) {
 
 function SlackCard({ channel }: { channel: ChannelStatus }) {
 	const isConfigured = channel.configured;
+	const isConnected = channel.connected === true;
 
 	return (
 		<div
@@ -107,7 +108,7 @@ function SlackCard({ channel }: { channel: ChannelStatus }) {
 				{isConfigured ? (
 					<div className="flex items-center gap-1.5 text-xs text-muted-foreground">
 						<CheckIcon size={14} className="text-success" />
-						<span>Configured</span>
+						<span>{isConnected ? "Connected" : "Configured"}</span>
 					</div>
 				) : (
 					<>

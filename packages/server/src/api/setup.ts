@@ -55,6 +55,7 @@ type SettingsRepo = ReturnType<typeof createSettingsRepository>;
 
 interface SetupDeps {
 	onSlackTokensUpdated?: (tokens?: { botToken: string; appToken: string }) => Promise<void>;
+	onLlmSettingsUpdated?: () => Promise<void>;
 }
 
 export function setupRoutes(settings: SettingsRepo, deps: SetupDeps = {}) {
@@ -186,6 +187,10 @@ export function setupRoutes(settings: SettingsRepo, deps: SetupDeps = {}) {
 				awsSecretAccessKey: parsed.data.awsSecretAccessKey.trim(),
 				awsRegion: parsed.data.awsRegion.trim(),
 			});
+		}
+
+		if (deps.onLlmSettingsUpdated) {
+			await deps.onLlmSettingsUpdated();
 		}
 
 		return c.json({ success: true });

@@ -12,11 +12,13 @@ export function channelRoutes(deps: ChannelDeps) {
 
 	routes.get("/status", (c) => {
 		const slackBot = deps.getSlack?.() ?? null;
+		const slackConfigured = !!slackBot;
+
 		const channels = [
 			{
 				platform: "slack" as const,
-				configured: !!slackBot,
-				connected: null,
+				configured: slackConfigured,
+				connected: slackConfigured ? true : null,
 			},
 			{
 				platform: "whatsapp" as const,
