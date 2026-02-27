@@ -1,4 +1,4 @@
-import { Check, Minus } from "@phosphor-icons/react";
+import { CheckIcon, MinusIcon } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -71,7 +71,7 @@ export function StepCompletion({ data, onGoToDashboard }: StepCompletionProps) {
 		<div className="w-full max-w-[480px] text-center">
 			<div className="mb-6 flex justify-center">
 				<div className="flex size-16 items-center justify-center rounded-full bg-success/10">
-					<Check weight="bold" className="size-7 text-success" />
+					<CheckIcon weight="bold" className="size-7 text-success" />
 				</div>
 			</div>
 
@@ -85,9 +85,9 @@ export function StepCompletion({ data, onGoToDashboard }: StepCompletionProps) {
 						<div className="flex items-center gap-1.5">
 							{"connected" in item &&
 								(item.connected ? (
-									<Check weight="bold" className="size-3.5 text-success" />
+									<CheckIcon weight="bold" className="size-3.5 text-success" />
 								) : (
-									<Minus className="size-3.5 text-muted-foreground" />
+									<MinusIcon className="size-3.5 text-muted-foreground" />
 								))}
 							<span className="text-sm font-medium">{item.value}</span>
 						</div>

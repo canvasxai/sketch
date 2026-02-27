@@ -34,6 +34,7 @@ function OnboardingPage() {
 	const navigate = useNavigate();
 
 	const [currentStep, setCurrentStep] = useState(1);
+	const [maxStepReached, setMaxStepReached] = useState(1);
 	const [organizationName, setOrganizationName] = useState("");
 	const [botName, setBotName] = useState("Sketch");
 	const [slackConnected, setSlackConnected] = useState(false);
@@ -41,7 +42,13 @@ function OnboardingPage() {
 	const [whatsappConnected, setWhatsappConnected] = useState(false);
 	const [whatsappPhone, setWhatsappPhone] = useState<string | undefined>();
 	const [llmProvider, setLlmProvider] = useState<"anthropic" | "bedrock">("anthropic");
+	const [llmConnected, setLlmConnected] = useState(false);
 	const [invitedCount, setInvitedCount] = useState(0);
+
+	const goToStep = (nextStep: number) => {
+		setCurrentStep(nextStep);
+		setMaxStepReached((prev) => (nextStep > prev ? nextStep : prev));
+	};
 
 	const onboardingData = {
 		organizationName,
@@ -51,6 +58,7 @@ function OnboardingPage() {
 		whatsappConnected,
 		whatsappPhone,
 		llmProvider,
+		llmConnected,
 		invitedCount,
 	};
 
@@ -58,15 +66,17 @@ function OnboardingPage() {
 
 	switch (currentStep) {
 		case 1:
-			content = <CreateAccountStep onComplete={() => setCurrentStep(2)} />;
+			content = <CreateAccountStep onComplete={() => goToStep(2)} />;
 			break;
 		case 2:
 			content = (
 				<StepBotIdentity
+					initialOrganizationName={organizationName}
+					initialBotName={botName}
 					onNext={({ organizationName: orgName, botName: name }) => {
 						setOrganizationName(orgName);
 						setBotName(name);
-						setCurrentStep(3);
+						goToStep(3);
 					}}
 				/>
 			);
@@ -75,6 +85,8 @@ function OnboardingPage() {
 			content = (
 				<StepConnectChannels
 					botName={botName}
+					initialSlackConnected={slackConnected}
+					initialSlackWorkspace={slackWorkspace}
 					onNext={({
 						slackConnected: slackOk,
 						slackWorkspace: workspace,
@@ -85,7 +97,7 @@ function OnboardingPage() {
 						setSlackWorkspace(workspace);
 						setWhatsappConnected(waOk);
 						setWhatsappPhone(waPhone);
-						setCurrentStep(4);
+						goToStep(4);
 					}}
 				/>
 			);
@@ -93,9 +105,12 @@ function OnboardingPage() {
 		case 4:
 			content = (
 				<StepConfigureLLM
-					onNext={({ provider }) => {
+					initialProvider={llmProvider}
+					initialConnected={llmConnected}
+					onNext={({ provider, connected }) => {
 						setLlmProvider(provider);
-						setCurrentStep(5);
+						setLlmConnected(connected);
+						goToStep(5);
 					}}
 				/>
 			);
@@ -108,8 +123,8 @@ function OnboardingPage() {
 					slackConnected={slackConnected}
 					whatsappConnected={whatsappConnected}
 					whatsappPhone={whatsappPhone}
-					onNext={() => setCurrentStep(6)}
-					onSkip={() => setCurrentStep(6)}
+					onNext={() => goToStep(6)}
+					onSkip={() => goToStep(6)}
 				/>
 			);
 			break;
@@ -120,11 +135,11 @@ function OnboardingPage() {
 					whatsappConnected={whatsappConnected}
 					onFinish={(count) => {
 						setInvitedCount(count);
-						setCurrentStep(7);
+						goToStep(7);
 					}}
 					onSkip={() => {
 						setInvitedCount(0);
-						setCurrentStep(7);
+						goToStep(7);
 					}}
 				/>
 			);
@@ -142,7 +157,13 @@ function OnboardingPage() {
 				<span className="text-lg font-semibold tracking-tight">Sketch</span>
 			</div>
 
-			{currentStep <= 6 && <ProgressIndicator currentStep={Math.min(currentStep, 6)} />}
+			{currentStep <= 6 && (
+				<ProgressIndicator
+					currentStep={Math.min(currentStep, 6)}
+					maxStepReached={Math.min(maxStepReached, 6)}
+					onStepClick={(step) => goToStep(step)}
+				/>
+			)}
 			{content}
 		</div>
 	);

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { ChatCircle, Check, SpinnerGap } from "@phosphor-icons/react";
+import { ChatCircleIcon, CheckIcon, SpinnerGapIcon } from "@phosphor-icons/react";
 
 import { Button } from "@/components/ui/button";
 
@@ -74,7 +74,7 @@ export function StepTestSetup({
 					<div className="flex flex-col items-center py-6">
 						<div className="relative mb-4">
 							<div className="flex size-12 items-center justify-center rounded-full bg-primary/10">
-								<SpinnerGap className="size-5 animate-spin text-primary" />
+								<SpinnerGapIcon className="size-5 animate-spin text-primary" />
 							</div>
 							<div className="animate-ping absolute inset-0 rounded-full bg-primary/5" />
 						</div>
@@ -89,7 +89,7 @@ export function StepTestSetup({
 					<div className="space-y-4">
 						<div className="mb-3 flex items-center gap-2">
 							<div className="flex size-6 items-center justify-center rounded-full bg-success/10">
-								<Check weight="bold" className="size-3.5 text-success" />
+								<CheckIcon weight="bold" className="size-3.5 text-success" />
 							</div>
 							<span className="text-sm font-medium text-success">Message received!</span>
 						</div>
@@ -103,7 +103,7 @@ export function StepTestSetup({
 
 							<div className="flex items-start gap-2">
 								<div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary">
-									<ChatCircle weight="fill" className="size-3.5 text-primary-foreground" />
+									<ChatCircleIcon weight="fill" className="size-3.5 text-primary-foreground" />
 								</div>
 								<div>
 									<p className="mb-1 text-xs text-muted-foreground">

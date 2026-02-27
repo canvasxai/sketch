@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { SpinnerGap } from "@phosphor-icons/react";
+import { SpinnerGapIcon } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 type Provider = "anthropic" | "bedrock";
 
 interface StepConfigureLLMProps {
+	initialProvider?: Provider;
+	initialConnected?: boolean;
 	onNext: (data: {
 		provider: Provider;
 		connected: boolean;
@@ -21,13 +23,13 @@ interface StepConfigureLLMProps {
 
 const bedrockRegions = ["us-east-1", "us-west-2", "eu-west-1", "eu-west-3", "ap-southeast-1", "ap-northeast-1"];
 
-export function StepConfigureLLM({ onNext }: StepConfigureLLMProps) {
-	const [provider, setProvider] = useState<Provider>("anthropic");
+export function StepConfigureLLM({ initialProvider, initialConnected, onNext }: StepConfigureLLMProps) {
+	const [provider, setProvider] = useState<Provider>(initialProvider ?? "anthropic");
 	const [apiKey, setApiKey] = useState("");
 	const [awsAccessKey, setAwsAccessKey] = useState("");
 	const [awsSecretKey, setAwsSecretKey] = useState("");
 	const [awsRegion, setAwsRegion] = useState("us-east-1");
-	const [isConnected, setIsConnected] = useState(false);
+	const [isConnected, setIsConnected] = useState(initialConnected ?? false);
 	const [error, setError] = useState("");
 
 	const connectMutation = useMutation({
@@ -77,7 +79,7 @@ export function StepConfigureLLM({ onNext }: StepConfigureLLMProps) {
 					<div className="rounded-lg border bg-card p-5">
 						<div className="flex items-center gap-3">
 							<div className="flex size-10 items-center justify-center rounded-full bg-success/10">
-								<SpinnerGap weight="bold" className="size-5 text-success" />
+								<SpinnerGapIcon weight="bold" className="size-5 text-success" />
 							</div>
 							<div>
 								<p className="text-sm font-medium">
@@ -215,7 +217,7 @@ export function StepConfigureLLM({ onNext }: StepConfigureLLMProps) {
 					<Button className="w-full" onClick={() => connectMutation.mutate()} disabled={!canConnect || isVerifying}>
 						{isVerifying ? (
 							<>
-								<SpinnerGap className="size-4 animate-spin" />
+								<SpinnerGapIcon className="size-4 animate-spin" />
 								Verifying...
 							</>
 						) : (

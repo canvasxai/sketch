@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { Check, EnvelopeSimple, Plus, SpinnerGap, UsersThree, X } from "@phosphor-icons/react";
+import { CheckIcon, EnvelopeSimpleIcon, PlusIcon, SpinnerGapIcon, UsersThreeIcon, XIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -83,7 +83,7 @@ export function StepInviteTeam({ slackConnected, whatsappConnected, onFinish, on
 
 			{!bannerDismissed && (
 				<div className="mb-5 flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
-					<UsersThree weight="fill" className="mt-0.5 size-4 shrink-0 text-primary" />
+					<UsersThreeIcon weight="fill" className="mt-0.5 size-4 shrink-0 text-primary" />
 					<p className="flex-1 text-xs leading-relaxed text-muted-foreground">
 						Invite your team to start using Sketch. Team members authenticate via Slack or WhatsApp — no accounts to
 						create.
@@ -93,7 +93,7 @@ export function StepInviteTeam({ slackConnected, whatsappConnected, onFinish, on
 						onClick={() => setBannerDismissed(true)}
 						className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
 					>
-						<X className="size-3.5" />
+						<XIcon className="size-3.5" />
 					</button>
 				</div>
 			)}
@@ -118,7 +118,7 @@ export function StepInviteTeam({ slackConnected, whatsappConnected, onFinish, on
 						}
 					/>
 					<Button variant="outline" size="icon" onClick={handleAddInvite} disabled={!inputValue.trim()}>
-						<Plus className="size-4" />
+						<PlusIcon className="size-4" />
 					</Button>
 				</div>
 
@@ -128,7 +128,7 @@ export function StepInviteTeam({ slackConnected, whatsappConnected, onFinish, on
 							<div key={invite.id} className="flex items-center justify-between px-3 py-2.5">
 								<div className="flex items-center gap-2.5">
 									<div className="flex size-7 items-center justify-center rounded-full bg-muted">
-										<EnvelopeSimple className="size-3.5 text-muted-foreground" />
+										<EnvelopeSimpleIcon className="size-3.5 text-muted-foreground" />
 									</div>
 									<div>
 										<p className="text-sm">{invite.identifier}</p>
@@ -138,7 +138,7 @@ export function StepInviteTeam({ slackConnected, whatsappConnected, onFinish, on
 								<div className="flex items-center gap-2">
 									{invite.status === "sent" ? (
 										<Badge variant="secondary" className="gap-1 border-0 bg-success/10 text-success">
-											<Check weight="bold" className="size-2.5" />
+											<CheckIcon weight="bold" className="size-2.5" />
 											Sent
 										</Badge>
 									) : (
@@ -147,7 +147,7 @@ export function StepInviteTeam({ slackConnected, whatsappConnected, onFinish, on
 											onClick={() => handleRemoveInvite(invite.id)}
 											className="text-muted-foreground transition-colors hover:text-foreground"
 										>
-											<X className="size-3.5" />
+											<XIcon className="size-3.5" />
 										</button>
 									)}
 								</div>
@@ -160,7 +160,7 @@ export function StepInviteTeam({ slackConnected, whatsappConnected, onFinish, on
 					<Button variant="outline" className="w-full" onClick={handleSendInvites} disabled={isSending}>
 						{isSending ? (
 							<>
-								<SpinnerGap className="size-4 animate-spin" />
+								<SpinnerGapIcon className="size-4 animate-spin" />
 								Sending...
 							</>
 						) : (

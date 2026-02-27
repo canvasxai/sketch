@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-import { ArrowSquareOut, Check, CopySimple, SlackLogo, SpinnerGap } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, CheckIcon, CopySimpleIcon, SlackLogoIcon, SpinnerGapIcon } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -20,6 +20,8 @@ interface ChannelState {
 
 interface StepConnectChannelsProps {
 	botName: string;
+	initialSlackConnected?: boolean;
+	initialSlackWorkspace?: string;
 	onNext: (data: {
 		slackConnected: boolean;
 		slackWorkspace?: string;
@@ -28,9 +30,18 @@ interface StepConnectChannelsProps {
 	}) => void;
 }
 
-export function StepConnectChannels({ botName, onNext }: StepConnectChannelsProps) {
+export function StepConnectChannels({
+	botName,
+	initialSlackConnected,
+	initialSlackWorkspace,
+	onNext,
+}: StepConnectChannelsProps) {
 	const [channels, setChannels] = useState<ChannelState>({
-		slack: { connected: false, connecting: false },
+		slack: {
+			connected: Boolean(initialSlackConnected),
+			connecting: false,
+			workspaceName: initialSlackWorkspace,
+		},
 	});
 
 	const [slackBotToken, setSlackBotToken] = useState("");
@@ -178,12 +189,12 @@ export function StepConnectChannels({ botName, onNext }: StepConnectChannelsProp
 				<div className="rounded-lg border bg-card p-5">
 					<div className="mb-4 flex items-center justify-between">
 						<div className="flex items-center gap-2.5">
-							<SlackLogo className="size-5" />
+							<SlackLogoIcon className="size-5" />
 							<span className="text-sm font-medium">Slack</span>
 						</div>
 						{channels.slack.connected ? (
 							<Badge variant="secondary" className="gap-1 border-0 bg-success/10 text-success">
-								<Check weight="bold" className="size-3" />
+								<CheckIcon weight="bold" className="size-3" />
 								Connected to &ldquo;{channels.slack.workspaceName}&rdquo;
 							</Badge>
 						) : (
@@ -216,12 +227,12 @@ export function StepConnectChannels({ botName, onNext }: StepConnectChannelsProp
 								<Button variant="outline" size="sm" onClick={handleCopyManifest}>
 									{manifestCopied ? (
 										<>
-											<Check className="size-3.5 text-emerald-500" weight="bold" />
+											<CheckIcon className="size-3.5 text-emerald-500" weight="bold" />
 											Copied
 										</>
 									) : (
 										<>
-											<CopySimple className="size-3.5" />
+											<CopySimpleIcon className="size-3.5" />
 											Copy Manifest
 										</>
 									)}
@@ -229,7 +240,7 @@ export function StepConnectChannels({ botName, onNext }: StepConnectChannelsProp
 								<Button variant="ghost" size="sm" asChild>
 									<a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer">
 										Open Slack API
-										<ArrowSquareOut className="size-3.5" />
+										<ArrowSquareOutIcon className="size-3.5" />
 									</a>
 								</Button>
 							</div>
@@ -269,7 +280,7 @@ export function StepConnectChannels({ botName, onNext }: StepConnectChannelsProp
 								>
 									{channels.slack.connecting ? (
 										<>
-											<SpinnerGap className="size-3.5 animate-spin" />
+											<SpinnerGapIcon className="size-3.5 animate-spin" />
 											Connecting...
 										</>
 									) : (

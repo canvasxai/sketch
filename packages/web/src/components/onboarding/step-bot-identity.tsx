@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { ChatCircle } from "@phosphor-icons/react";
+import { ChatCircleIcon } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -11,11 +11,13 @@ import { api } from "@/lib/api";
 
 interface StepBotIdentityProps {
 	onNext: (data: { organizationName: string; botName: string }) => void;
+	initialOrganizationName?: string;
+	initialBotName?: string;
 }
 
-export function StepBotIdentity({ onNext }: StepBotIdentityProps) {
-	const [organizationName, setOrganizationName] = useState("");
-	const [botName, setBotName] = useState("Sketch");
+export function StepBotIdentity({ onNext, initialOrganizationName, initialBotName }: StepBotIdentityProps) {
+	const [organizationName, setOrganizationName] = useState(initialOrganizationName ?? "");
+	const [botName, setBotName] = useState(initialBotName ?? "Sketch");
 	const [errors, setErrors] = useState<Record<string, string>>({});
 
 	const identityMutation = useMutation({
@@ -87,7 +89,7 @@ export function StepBotIdentity({ onNext }: StepBotIdentityProps) {
 					<p className="mb-3 text-xs text-muted-foreground">Preview</p>
 					<div className="flex items-start gap-3">
 						<div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary">
-							<ChatCircle weight="fill" className="size-4 text-primary-foreground" />
+							<ChatCircleIcon weight="fill" className="size-4 text-primary-foreground" />
 						</div>
 						<div className="space-y-1">
 							<p className="text-sm font-medium">
