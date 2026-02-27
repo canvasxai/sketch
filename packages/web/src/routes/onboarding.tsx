@@ -10,10 +10,11 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
-import { Eye, EyeSlash, Info, Sparkle, SpinnerGap } from "@phosphor-icons/react";
+import { clearOnboardingDraft, loadOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding-draft";
+import { Eye, EyeSlash, Info, Sparkle } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
 import { createRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { rootRoute } from "./root";
 
@@ -30,25 +31,86 @@ export const onboardingRoute = createRoute({
 	component: OnboardingPage,
 });
 
-function OnboardingPage() {
+export function OnboardingPage() {
 	const navigate = useNavigate();
 
-	const [currentStep, setCurrentStep] = useState(1);
-	const [maxStepReached, setMaxStepReached] = useState(1);
-	const [organizationName, setOrganizationName] = useState("");
-	const [botName, setBotName] = useState("Sketch");
-	const [slackConnected, setSlackConnected] = useState(false);
-	const [slackWorkspace, setSlackWorkspace] = useState<string | undefined>();
-	const [whatsappConnected, setWhatsappConnected] = useState(false);
-	const [whatsappPhone, setWhatsappPhone] = useState<string | undefined>();
-	const [llmProvider, setLlmProvider] = useState<"anthropic" | "bedrock">("anthropic");
-	const [llmConnected, setLlmConnected] = useState(false);
-	const [invitedCount, setInvitedCount] = useState(0);
+	const [initialDraft] = useState(() => loadOnboardingDraft());
+
+	const [currentStep, setCurrentStep] = useState(initialDraft?.currentStep ?? 1);
+	const [maxStepReached, setMaxStepReached] = useState(initialDraft?.maxStepReached ?? 1);
+
+	const [adminEmail, setAdminEmail] = useState(initialDraft?.adminEmail ?? "");
+	const [adminPassword, setAdminPassword] = useState(initialDraft?.adminPassword ?? "");
+
+	const [organizationName, setOrganizationName] = useState(initialDraft?.organizationName ?? "");
+	const [botName, setBotName] = useState(initialDraft?.botName ?? "Sketch");
+
+	const [slackConnected, setSlackConnected] = useState(initialDraft?.slackConnected ?? false);
+	const [slackWorkspace, setSlackWorkspace] = useState<string | undefined>(initialDraft?.slackWorkspace);
+	const [slackBotToken, setSlackBotToken] = useState(initialDraft?.slackBotToken ?? "");
+	const [slackAppToken, setSlackAppToken] = useState(initialDraft?.slackAppToken ?? "");
+
+	const [whatsappConnected, setWhatsappConnected] = useState(initialDraft?.whatsappConnected ?? false);
+	const [whatsappPhone, setWhatsappPhone] = useState<string | undefined>(initialDraft?.whatsappPhone);
+	const [llmProvider, setLlmProvider] = useState<"anthropic" | "bedrock">(initialDraft?.llmProvider ?? "anthropic");
+	const [llmConnected, setLlmConnected] = useState(initialDraft?.llmConnected ?? false);
+	const [anthropicApiKey, setAnthropicApiKey] = useState(initialDraft?.anthropicApiKey ?? "");
+	const [awsAccessKeyId, setAwsAccessKeyId] = useState(initialDraft?.awsAccessKeyId ?? "");
+	const [awsSecretAccessKey, setAwsSecretAccessKey] = useState(initialDraft?.awsSecretAccessKey ?? "");
+	const [awsRegion, setAwsRegion] = useState(initialDraft?.awsRegion ?? "us-east-1");
+
+	const [invitedCount, setInvitedCount] = useState(initialDraft?.invitedCount ?? 0);
 
 	const goToStep = (nextStep: number) => {
 		setCurrentStep(nextStep);
 		setMaxStepReached((prev) => (nextStep > prev ? nextStep : prev));
 	};
+
+	useEffect(() => {
+		saveOnboardingDraft({
+			version: 1,
+			updatedAt: Date.now(),
+			currentStep,
+			maxStepReached,
+			adminEmail,
+			adminPassword,
+			organizationName,
+			botName,
+			slackConnected,
+			slackWorkspace,
+			slackBotToken,
+			slackAppToken,
+			whatsappConnected,
+			whatsappPhone,
+			llmProvider,
+			llmConnected,
+			anthropicApiKey,
+			awsAccessKeyId,
+			awsSecretAccessKey,
+			awsRegion,
+			invitedCount,
+		});
+	}, [
+		currentStep,
+		maxStepReached,
+		adminEmail,
+		adminPassword,
+		organizationName,
+		botName,
+		slackConnected,
+		slackWorkspace,
+		slackBotToken,
+		slackAppToken,
+		whatsappConnected,
+		whatsappPhone,
+		llmProvider,
+		llmConnected,
+		anthropicApiKey,
+		awsAccessKeyId,
+		awsSecretAccessKey,
+		awsRegion,
+		invitedCount,
+	]);
 
 	const onboardingData = {
 		organizationName,
@@ -62,11 +124,76 @@ function OnboardingPage() {
 		invitedCount,
 	};
 
+	const finishMutation = useMutation({
+		mutationFn: async () => {
+			const status = await api.setup.status();
+			const adminAlreadyExists = status.currentStep === 1 || status.completed;
+
+			if (!adminAlreadyExists) {
+				if (!adminEmail.trim() || !adminPassword) {
+					throw new Error("Admin email and password are required");
+				}
+				await api.setup.createAccount(adminEmail.trim(), adminPassword);
+			}
+
+			await api.setup.identity(organizationName.trim(), botName.trim());
+
+			if (slackConnected) {
+				await api.setup.slack(slackBotToken.trim(), slackAppToken.trim());
+			}
+
+			if (llmConnected) {
+				if (llmProvider === "anthropic") {
+					await api.setup.llm({ provider: "anthropic", apiKey: anthropicApiKey.trim() });
+				} else {
+					await api.setup.llm({
+						provider: "bedrock",
+						awsAccessKeyId: awsAccessKeyId.trim(),
+						awsSecretAccessKey: awsSecretAccessKey.trim(),
+						awsRegion: awsRegion.trim(),
+					});
+				}
+			}
+
+			await api.setup.complete();
+
+			const canAutoLogin = adminEmail.trim().length > 0 && adminPassword.length > 0;
+			if (canAutoLogin) {
+				await api.auth.login(adminEmail.trim(), adminPassword);
+			}
+
+			return { canAutoLogin };
+		},
+		onSuccess: ({ canAutoLogin }) => {
+			clearOnboardingDraft();
+			if (canAutoLogin) {
+				toast.success("Setup complete. Redirecting to dashboard.");
+				navigate({ to: "/channels" });
+			} else {
+				toast.success("Setup complete. Please sign in to continue.");
+				navigate({ to: "/login" });
+			}
+		},
+		onError: (error: Error) => {
+			toast.error(error.message);
+		},
+	});
+
 	let content: React.ReactNode;
 
 	switch (currentStep) {
 		case 1:
-			content = <CreateAccountStep onComplete={() => goToStep(2)} />;
+			content = (
+				<CreateAccountStep
+					initialEmail={adminEmail}
+					initialPassword={adminPassword}
+					onComplete={({ email, password }) => {
+						setAdminEmail(email);
+						setAdminPassword(password);
+						goToStep(2);
+					}}
+				/>
+			);
 			break;
 		case 2:
 			content = (
@@ -87,14 +214,20 @@ function OnboardingPage() {
 					botName={botName}
 					initialSlackConnected={slackConnected}
 					initialSlackWorkspace={slackWorkspace}
+					initialSlackBotToken={slackBotToken}
+					initialSlackAppToken={slackAppToken}
 					onNext={({
 						slackConnected: slackOk,
 						slackWorkspace: workspace,
+						slackBotToken: botToken,
+						slackAppToken: appToken,
 						whatsappConnected: waOk,
 						whatsappPhone: waPhone,
 					}) => {
 						setSlackConnected(slackOk);
 						setSlackWorkspace(workspace);
+						setSlackBotToken(botToken);
+						setSlackAppToken(appToken);
 						setWhatsappConnected(waOk);
 						setWhatsappPhone(waPhone);
 						goToStep(4);
@@ -107,9 +240,17 @@ function OnboardingPage() {
 				<StepConfigureLLM
 					initialProvider={llmProvider}
 					initialConnected={llmConnected}
-					onNext={({ provider, connected }) => {
+					initialAnthropicApiKey={anthropicApiKey}
+					initialAwsAccessKeyId={awsAccessKeyId}
+					initialAwsSecretAccessKey={awsSecretAccessKey}
+					initialAwsRegion={awsRegion}
+					onNext={({ provider, connected, anthropicApiKey, awsAccessKeyId, awsSecretAccessKey, awsRegion }) => {
 						setLlmProvider(provider);
 						setLlmConnected(connected);
+						setAnthropicApiKey(anthropicApiKey);
+						setAwsAccessKeyId(awsAccessKeyId);
+						setAwsSecretAccessKey(awsSecretAccessKey);
+						setAwsRegion(awsRegion);
 						goToStep(5);
 					}}
 				/>
@@ -145,7 +286,13 @@ function OnboardingPage() {
 			);
 			break;
 		default:
-			content = <StepCompletion data={onboardingData} onGoToDashboard={() => navigate({ to: "/channels" })} />;
+			content = (
+				<StepCompletion
+					data={onboardingData}
+					isFinishing={finishMutation.isPending}
+					onGoToDashboard={() => finishMutation.mutate()}
+				/>
+			);
 	}
 
 	return (
@@ -169,32 +316,21 @@ function OnboardingPage() {
 	);
 }
 
-export function CreateAccountStep({ onComplete }: { onComplete: () => void }) {
-	const [email, setEmail] = useState("");
-	const [password, setPassword] = useState("");
+export function CreateAccountStep({
+	initialEmail,
+	initialPassword,
+	onComplete,
+}: {
+	initialEmail?: string;
+	initialPassword?: string;
+	onComplete: (data: { email: string; password: string }) => void;
+}) {
+	const [email, setEmail] = useState(initialEmail ?? "");
+	const [password, setPassword] = useState(initialPassword ?? "");
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [showPassword, setShowPassword] = useState(false);
 	const [showConfirm, setShowConfirm] = useState(false);
 	const [errors, setErrors] = useState<Record<string, string>>({});
-
-	const createAccountMutation = useMutation({
-		mutationFn: () => api.setup.createAccount(email, password),
-		onSuccess: async () => {
-			try {
-				await api.auth.login(email, password);
-			} catch (error) {
-				const message =
-					error instanceof Error ? error.message : "Login failed. Please log in with your new credentials.";
-				toast.error(message);
-			}
-
-			toast.success("Admin account created");
-			onComplete();
-		},
-		onError: (error: Error) => {
-			toast.error(error.message);
-		},
-	});
 
 	function validate(): boolean {
 		const newErrors: Record<string, string> = {};
@@ -222,7 +358,7 @@ export function CreateAccountStep({ onComplete }: { onComplete: () => void }) {
 	const handleSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
 		if (validate()) {
-			createAccountMutation.mutate();
+			onComplete({ email: email.trim(), password });
 		}
 	};
 
@@ -230,7 +366,7 @@ export function CreateAccountStep({ onComplete }: { onComplete: () => void }) {
 		<Card className="w-full max-w-[480px]">
 			<CardHeader className="text-center">
 				<h1 className="text-xl font-semibold">Create your admin account</h1>
-				<p className="text-sm text-muted-foreground">Set up credentials for the Sketch admin panel</p>
+				<p className="text-sm text-muted-foreground">We’ll create the account when you finish setup</p>
 			</CardHeader>
 			<CardContent>
 				<form onSubmit={handleSubmit} className="space-y-4">
@@ -300,15 +436,8 @@ export function CreateAccountStep({ onComplete }: { onComplete: () => void }) {
 						</p>
 					</div>
 
-					<Button type="submit" className="w-full" disabled={createAccountMutation.isPending}>
-						{createAccountMutation.isPending ? (
-							<>
-								<SpinnerGap size={16} className="animate-spin" />
-								Creating account...
-							</>
-						) : (
-							"Continue"
-						)}
+					<Button type="submit" className="w-full">
+						Continue
 					</Button>
 				</form>
 			</CardContent>

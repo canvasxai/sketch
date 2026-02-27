@@ -1,13 +1,10 @@
 import { useState } from "react";
 
 import { ChatCircleIcon } from "@phosphor-icons/react";
-import { useMutation } from "@tanstack/react-query";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { api } from "@/lib/api";
 
 interface StepBotIdentityProps {
 	onNext: (data: { organizationName: string; botName: string }) => void;
@@ -19,16 +16,6 @@ export function StepBotIdentity({ onNext, initialOrganizationName, initialBotNam
 	const [organizationName, setOrganizationName] = useState(initialOrganizationName ?? "");
 	const [botName, setBotName] = useState(initialBotName ?? "Sketch");
 	const [errors, setErrors] = useState<Record<string, string>>({});
-
-	const identityMutation = useMutation({
-		mutationFn: () => api.setup.identity(organizationName.trim(), botName.trim()),
-		onSuccess: () => {
-			onNext({ organizationName: organizationName.trim(), botName: botName.trim() });
-		},
-		onError: (error: Error) => {
-			toast.error(error.message);
-		},
-	});
 
 	const validate = () => {
 		const newErrors: Record<string, string> = {};
@@ -45,7 +32,7 @@ export function StepBotIdentity({ onNext, initialOrganizationName, initialBotNam
 	const handleSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!validate()) return;
-		identityMutation.mutate();
+		onNext({ organizationName: organizationName.trim(), botName: botName.trim() });
 	};
 
 	const previewBotName = botName.trim() || "Sketch";
@@ -105,7 +92,7 @@ export function StepBotIdentity({ onNext, initialOrganizationName, initialBotNam
 					</div>
 				</div>
 
-				<Button type="submit" className="w-full" disabled={identityMutation.isPending}>
+				<Button type="submit" className="w-full">
 					Continue
 				</Button>
 			</form>

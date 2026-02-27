@@ -22,9 +22,13 @@ interface StepConnectChannelsProps {
 	botName: string;
 	initialSlackConnected?: boolean;
 	initialSlackWorkspace?: string;
+	initialSlackBotToken?: string;
+	initialSlackAppToken?: string;
 	onNext: (data: {
 		slackConnected: boolean;
 		slackWorkspace?: string;
+		slackBotToken: string;
+		slackAppToken: string;
 		whatsappConnected: boolean;
 		whatsappPhone?: string;
 	}) => void;
@@ -34,6 +38,8 @@ export function StepConnectChannels({
 	botName,
 	initialSlackConnected,
 	initialSlackWorkspace,
+	initialSlackBotToken,
+	initialSlackAppToken,
 	onNext,
 }: StepConnectChannelsProps) {
 	const [channels, setChannels] = useState<ChannelState>({
@@ -44,21 +50,21 @@ export function StepConnectChannels({
 		},
 	});
 
-	const [slackBotToken, setSlackBotToken] = useState("");
-	const [slackAppToken, setSlackAppToken] = useState("");
+	const [slackBotToken, setSlackBotToken] = useState(initialSlackBotToken ?? "");
+	const [slackAppToken, setSlackAppToken] = useState(initialSlackAppToken ?? "");
 	const [manifestCopied, setManifestCopied] = useState(false);
 
 	const slackConnectMutation = useMutation({
 		mutationFn: async () => {
-			return api.setup.slack(slackBotToken.trim(), slackAppToken.trim());
+			return api.setup.verifySlack(slackBotToken.trim(), slackAppToken.trim());
 		},
-		onSuccess: () => {
+		onSuccess: (result) => {
 			setChannels((prev) => ({
 				...prev,
 				slack: {
 					connected: true,
 					connecting: false,
-					workspaceName: "My Workspace",
+					workspaceName: result.workspaceName ?? "Workspace",
 				},
 			}));
 			toast.success("Connected to Slack.");
@@ -170,6 +176,8 @@ export function StepConnectChannels({
 		onNext({
 			slackConnected: channels.slack.connected,
 			slackWorkspace: channels.slack.workspaceName,
+			slackBotToken: slackBotToken.trim(),
+			slackAppToken: slackAppToken.trim(),
 			whatsappConnected: false,
 			whatsappPhone: undefined,
 		});

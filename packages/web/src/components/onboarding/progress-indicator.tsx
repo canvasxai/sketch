@@ -25,8 +25,7 @@ export function ProgressIndicator({ currentStep, maxStepReached, onStepClick }: 
 			{steps.map((step, i) => {
 				const isCompleted = effectiveMaxStep > step.number;
 				const isCurrent = currentStep === step.number;
-				const canNavigateToStep =
-					Boolean(onStepClick) && step.number !== 1 && step.number <= effectiveMaxStep && !isCurrent;
+				const canNavigateToStep = Boolean(onStepClick) && step.number <= effectiveMaxStep && !isCurrent;
 
 				return (
 					<div key={step.number} className="flex items-center gap-1 sm:gap-2">

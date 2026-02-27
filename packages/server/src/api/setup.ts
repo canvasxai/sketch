@@ -8,6 +8,27 @@ import { z } from "zod";
 import { hashPassword } from "../auth/password";
 import type { createSettingsRepository } from "../db/repositories/settings";
 
+async function slackApiCall(token: string, endpoint: "auth.test" | "apps.connections.open") {
+	const response = await fetch(`https://slack.com/api/${endpoint}`, {
+		method: "POST",
+		headers: {
+			Authorization: `Bearer ${token}`,
+			"Content-Type": "application/x-www-form-urlencoded",
+		},
+	});
+	const body = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; team?: string };
+	if (!response.ok || !body.ok) {
+		throw new Error(body.error ?? "invalid_auth");
+	}
+	return body;
+}
+
+async function verifySlackTokens(botToken: string, appToken: string): Promise<{ workspaceName?: string }> {
+	const auth = await slackApiCall(botToken, "auth.test");
+	await slackApiCall(appToken, "apps.connections.open");
+	return { workspaceName: auth.team };
+}
+
 const createAccountSchema = z.object({
 	email: z.email("Invalid email format"),
 	password: z.string().min(8, "Password must be at least 8 characters"),
@@ -69,6 +90,30 @@ export function setupRoutes(settings: SettingsRepo, deps: SetupDeps = {}) {
 			completed: isCompleted,
 			currentStep: isCompleted ? 7 : hasAdmin ? 1 : 0,
 		});
+	});
+
+	routes.post("/slack/verify", async (c) => {
+		const body = await c.req.json().catch(() => ({}));
+		const parsed = slackSchema.safeParse(body);
+		if (!parsed.success) {
+			const message = parsed.error.issues.map((i) => i.message).join(", ");
+			return c.json({ error: { code: "BAD_REQUEST", message } }, 400);
+		}
+
+		try {
+			const { workspaceName } = await verifySlackTokens(parsed.data.botToken.trim(), parsed.data.appToken.trim());
+			return c.json({ success: true, workspaceName });
+		} catch {
+			return c.json(
+				{
+					error: {
+						code: "INVALID_SLACK_TOKENS",
+						message: "Invalid Slack tokens. Check Bot Token and App-Level Token, then try again.",
+					},
+				},
+				400,
+			);
+		}
 	});
 
 	routes.post("/account", async (c) => {

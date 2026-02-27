@@ -1,13 +1,10 @@
 import { useState } from "react";
 
-import { SpinnerGapIcon } from "@phosphor-icons/react";
-import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type Provider = "anthropic" | "bedrock";
@@ -15,47 +12,48 @@ type Provider = "anthropic" | "bedrock";
 interface StepConfigureLLMProps {
 	initialProvider?: Provider;
 	initialConnected?: boolean;
+	initialAnthropicApiKey?: string;
+	initialAwsAccessKeyId?: string;
+	initialAwsSecretAccessKey?: string;
+	initialAwsRegion?: string;
 	onNext: (data: {
 		provider: Provider;
 		connected: boolean;
+		anthropicApiKey: string;
+		awsAccessKeyId: string;
+		awsSecretAccessKey: string;
+		awsRegion: string;
 	}) => void;
 }
 
 const bedrockRegions = ["us-east-1", "us-west-2", "eu-west-1", "eu-west-3", "ap-southeast-1", "ap-northeast-1"];
 
-export function StepConfigureLLM({ initialProvider, initialConnected, onNext }: StepConfigureLLMProps) {
+export function StepConfigureLLM({
+	initialProvider,
+	initialConnected,
+	initialAnthropicApiKey,
+	initialAwsAccessKeyId,
+	initialAwsSecretAccessKey,
+	initialAwsRegion,
+	onNext,
+}: StepConfigureLLMProps) {
 	const [provider, setProvider] = useState<Provider>(initialProvider ?? "anthropic");
-	const [apiKey, setApiKey] = useState("");
-	const [awsAccessKey, setAwsAccessKey] = useState("");
-	const [awsSecretKey, setAwsSecretKey] = useState("");
-	const [awsRegion, setAwsRegion] = useState("us-east-1");
+	const [apiKey, setApiKey] = useState(initialAnthropicApiKey ?? "");
+	const [awsAccessKey, setAwsAccessKey] = useState(initialAwsAccessKeyId ?? "");
+	const [awsSecretKey, setAwsSecretKey] = useState(initialAwsSecretAccessKey ?? "");
+	const [awsRegion, setAwsRegion] = useState(initialAwsRegion ?? "us-east-1");
 	const [isConnected, setIsConnected] = useState(initialConnected ?? false);
 	const [error, setError] = useState("");
 
-	const connectMutation = useMutation({
-		mutationFn: async () => {
-			setError("");
-			if (provider === "anthropic") {
-				return api.setup.llm({ provider: "anthropic", apiKey: apiKey.trim() });
-			}
-			return api.setup.llm({
-				provider: "bedrock",
-				awsAccessKeyId: awsAccessKey.trim(),
-				awsSecretAccessKey: awsSecretKey.trim(),
-				awsRegion,
-			});
-		},
-		onSuccess: () => {
-			setIsConnected(true);
-			toast.success(`Connected to ${provider === "anthropic" ? "Anthropic" : "AWS Bedrock"}, using Claude Sonnet.`);
-		},
-		onError: (err: Error) => {
-			setError(err.message);
-		},
-	});
-
 	const handleContinue = () => {
-		onNext({ provider, connected: isConnected });
+		onNext({
+			provider,
+			connected: isConnected,
+			anthropicApiKey: apiKey.trim(),
+			awsAccessKeyId: awsAccessKey.trim(),
+			awsSecretAccessKey: awsSecretKey.trim(),
+			awsRegion,
+		});
 	};
 
 	const canConnect =
@@ -63,7 +61,14 @@ export function StepConfigureLLM({ initialProvider, initialConnected, onNext }: 
 			? apiKey.trim().length > 0
 			: awsAccessKey.trim().length > 0 && awsSecretKey.trim().length > 0 && awsRegion.trim().length > 0;
 
-	const isVerifying = connectMutation.isPending;
+	const isVerifying = false;
+
+	const handleConnect = () => {
+		setError("");
+		if (!canConnect) return;
+		setIsConnected(true);
+		toast.success(`Connected to ${provider === "anthropic" ? "Anthropic" : "AWS Bedrock"}, using Claude Sonnet.`);
+	};
 
 	return (
 		<div className="w-full max-w-[520px]">
@@ -79,7 +84,7 @@ export function StepConfigureLLM({ initialProvider, initialConnected, onNext }: 
 					<div className="rounded-lg border bg-card p-5">
 						<div className="flex items-center gap-3">
 							<div className="flex size-10 items-center justify-center rounded-full bg-success/10">
-								<SpinnerGapIcon weight="bold" className="size-5 text-success" />
+								<span className="text-sm font-semibold text-success">✓</span>
 							</div>
 							<div>
 								<p className="text-sm font-medium">
@@ -214,15 +219,8 @@ export function StepConfigureLLM({ initialProvider, initialConnected, onNext }: 
 						Sketch defaults to Claude Sonnet. You can switch models per conversation from chat settings.
 					</p>
 
-					<Button className="w-full" onClick={() => connectMutation.mutate()} disabled={!canConnect || isVerifying}>
-						{isVerifying ? (
-							<>
-								<SpinnerGapIcon className="size-4 animate-spin" />
-								Verifying...
-							</>
-						) : (
-							"Connect"
-						)}
+					<Button className="w-full" onClick={handleConnect} disabled={!canConnect || isVerifying}>
+						Connect
 					</Button>
 				</div>
 			)}

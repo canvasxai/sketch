@@ -35,6 +35,12 @@ export const api = {
 		status() {
 			return request<{ completed: boolean; currentStep: number }>("/api/setup/status");
 		},
+		verifySlack(botToken: string, appToken: string) {
+			return request<{ success: boolean; workspaceName?: string }>("/api/setup/slack/verify", {
+				method: "POST",
+				body: JSON.stringify({ botToken, appToken }),
+			});
+		},
 		createAccount(email: string, password: string) {
 			return request<{ success: boolean }>("/api/setup/account", {
 				method: "POST",
