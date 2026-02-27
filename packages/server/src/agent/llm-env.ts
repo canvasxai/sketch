@@ -6,12 +6,20 @@ type LlmSettings = Pick<
 	"llm_provider" | "anthropic_api_key" | "aws_access_key_id" | "aws_secret_access_key" | "aws_region"
 >;
 
+function unsetEnv(...keys: string[]) {
+	for (const key of keys) {
+		Reflect.deleteProperty(process.env, key);
+	}
+}
+
 function clearProviderRoutingEnv() {
-	process.env.CLAUDE_CODE_USE_BEDROCK = undefined;
-	process.env.CLAUDE_CODE_USE_VERTEX = undefined;
-	process.env.CLAUDE_CODE_USE_FOUNDRY = undefined;
-	process.env.ANTHROPIC_BASE_URL = undefined;
-	process.env.ANTHROPIC_AUTH_TOKEN = undefined;
+	unsetEnv(
+		"CLAUDE_CODE_USE_BEDROCK",
+		"CLAUDE_CODE_USE_VERTEX",
+		"CLAUDE_CODE_USE_FOUNDRY",
+		"ANTHROPIC_BASE_URL",
+		"ANTHROPIC_AUTH_TOKEN",
+	);
 }
 
 export function applyLlmEnvFromSettings(settings: LlmSettings | null, logger?: Logger): void {
@@ -30,9 +38,7 @@ export function applyLlmEnvFromSettings(settings: LlmSettings | null, logger?: L
 		}
 
 		clearProviderRoutingEnv();
-		process.env.AWS_ACCESS_KEY_ID = undefined;
-		process.env.AWS_SECRET_ACCESS_KEY = undefined;
-		process.env.AWS_REGION = undefined;
+		unsetEnv("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION");
 		process.env.ANTHROPIC_API_KEY = settings.anthropic_api_key;
 		logger?.info({ llmProvider: "anthropic", source: "db" }, "Configured LLM provider from DB settings");
 		return;
@@ -53,7 +59,7 @@ export function applyLlmEnvFromSettings(settings: LlmSettings | null, logger?: L
 		}
 
 		clearProviderRoutingEnv();
-		process.env.ANTHROPIC_API_KEY = undefined;
+		unsetEnv("ANTHROPIC_API_KEY");
 		process.env.CLAUDE_CODE_USE_BEDROCK = "1";
 		process.env.AWS_ACCESS_KEY_ID = settings.aws_access_key_id;
 		process.env.AWS_SECRET_ACCESS_KEY = settings.aws_secret_access_key;
