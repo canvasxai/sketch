@@ -30,15 +30,36 @@ export interface ChannelStatus {
 	connected: boolean | null;
 }
 
+export interface SetupStatus {
+	completed: boolean;
+	currentStep: number;
+	adminEmail: string | null;
+	orgName: string | null;
+	botName: string;
+	slackConnected: boolean;
+	llmConnected: boolean;
+	llmProvider: "anthropic" | "bedrock" | null;
+}
+
 export const api = {
 	setup: {
 		status() {
-			return request<{ completed: boolean; currentStep: number }>("/api/setup/status");
+			return request<SetupStatus>("/api/setup/status");
 		},
 		verifySlack(botToken: string, appToken: string) {
 			return request<{ success: boolean; workspaceName?: string }>("/api/setup/slack/verify", {
 				method: "POST",
 				body: JSON.stringify({ botToken, appToken }),
+			});
+		},
+		verifyLlm(
+			data:
+				| { provider: "anthropic"; apiKey: string }
+				| { provider: "bedrock"; awsAccessKeyId: string; awsSecretAccessKey: string; awsRegion: string },
+		) {
+			return request<{ success: boolean }>("/api/setup/llm/verify", {
+				method: "POST",
+				body: JSON.stringify(data),
 			});
 		},
 		createAccount(email: string, password: string) {

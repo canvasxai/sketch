@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ChatCircleIcon } from "@phosphor-icons/react";
 
@@ -10,12 +10,27 @@ interface StepBotIdentityProps {
 	onNext: (data: { organizationName: string; botName: string }) => void;
 	initialOrganizationName?: string;
 	initialBotName?: string;
+	isSubmitting?: boolean;
+	onDraftChange?: (data: { organizationName: string; botName: string }) => void;
 }
 
-export function StepBotIdentity({ onNext, initialOrganizationName, initialBotName }: StepBotIdentityProps) {
+export function StepBotIdentity({
+	onNext,
+	initialOrganizationName,
+	initialBotName,
+	isSubmitting,
+	onDraftChange,
+}: StepBotIdentityProps) {
 	const [organizationName, setOrganizationName] = useState(initialOrganizationName ?? "");
 	const [botName, setBotName] = useState(initialBotName ?? "Sketch");
 	const [errors, setErrors] = useState<Record<string, string>>({});
+
+	useEffect(() => {
+		onDraftChange?.({
+			organizationName,
+			botName,
+		});
+	}, [organizationName, botName, onDraftChange]);
 
 	const validate = () => {
 		const newErrors: Record<string, string> = {};
@@ -56,6 +71,7 @@ export function StepBotIdentity({ onNext, initialOrganizationName, initialBotNam
 						onChange={(e) => setOrganizationName(e.target.value)}
 						placeholder="Acme Corp"
 						aria-invalid={!!errors.organizationName}
+						disabled={Boolean(isSubmitting)}
 					/>
 					{errors.organizationName && <p className="text-xs text-destructive">{errors.organizationName}</p>}
 				</div>
@@ -68,6 +84,7 @@ export function StepBotIdentity({ onNext, initialOrganizationName, initialBotNam
 						onChange={(e) => setBotName(e.target.value)}
 						placeholder="Sketch"
 						aria-invalid={!!errors.botName}
+						disabled={Boolean(isSubmitting)}
 					/>
 					{errors.botName && <p className="text-xs text-destructive">{errors.botName}</p>}
 				</div>
@@ -92,8 +109,8 @@ export function StepBotIdentity({ onNext, initialOrganizationName, initialBotNam
 					</div>
 				</div>
 
-				<Button type="submit" className="w-full">
-					Continue
+				<Button type="submit" className="w-full" disabled={Boolean(isSubmitting)}>
+					{isSubmitting ? "Saving..." : "Continue"}
 				</Button>
 			</form>
 		</div>

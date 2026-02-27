@@ -1,31 +1,17 @@
 /**
  * Setup API routes for the onboarding wizard.
- * These routes are always public (no auth required) and are the only
- * API routes available when onboarding is incomplete.
+ * Only status/account are public; subsequent setup steps require auth.
  */
 import { Hono } from "hono";
 import { z } from "zod";
 import { hashPassword } from "../auth/password";
 import type { createSettingsRepository } from "../db/repositories/settings";
-
-async function slackApiCall(token: string, endpoint: "auth.test" | "apps.connections.open") {
-	const response = await fetch(`https://slack.com/api/${endpoint}`, {
-		method: "POST",
-		headers: {
-			Authorization: `Bearer ${token}`,
-			"Content-Type": "application/x-www-form-urlencoded",
-		},
-	});
-	const body = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; team?: string };
-	if (!response.ok || !body.ok) {
-		throw new Error(body.error ?? "invalid_auth");
-	}
-	return body;
-}
+import { slackApiCall } from "../slack/api";
+import { createSession } from "./auth";
 
 async function verifySlackTokens(botToken: string, appToken: string): Promise<{ workspaceName?: string }> {
+	void appToken;
 	const auth = await slackApiCall(botToken, "auth.test");
-	await slackApiCall(appToken, "apps.connections.open");
 	return { workspaceName: auth.team };
 }
 
@@ -72,6 +58,30 @@ const llmSchema = z.discriminatedUnion("provider", [
 	}),
 ]);
 
+async function verifyAnthropicApiKey(apiKey: string): Promise<void> {
+	const response = await fetch("https://api.anthropic.com/v1/messages", {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			"x-api-key": apiKey,
+			"anthropic-version": "2023-06-01",
+		},
+		body: JSON.stringify({
+			model: "claude-3-5-sonnet-20241022",
+			max_tokens: 1,
+			messages: [{ role: "user", content: "Ping" }],
+		}),
+	});
+
+	if (response.status === 401 || response.status === 403) {
+		throw new Error("invalid_auth");
+	}
+
+	if (!response.ok) {
+		throw new Error("verification_failed");
+	}
+}
+
 type SettingsRepo = ReturnType<typeof createSettingsRepository>;
 
 interface SetupDeps {
@@ -85,10 +95,24 @@ export function setupRoutes(settings: SettingsRepo, deps: SetupDeps = {}) {
 	routes.get("/status", async (c) => {
 		const row = await settings.get();
 		const hasAdmin = Boolean(row?.admin_email);
+		const hasIdentity = Boolean(row?.org_name?.trim() && row?.bot_name?.trim());
+		const hasSlack = Boolean(row?.slack_bot_token?.trim() && row?.slack_app_token?.trim());
+		const hasAnthropic = row?.llm_provider === "anthropic" && Boolean(row?.anthropic_api_key?.trim());
+		const hasBedrock =
+			row?.llm_provider === "bedrock" &&
+			Boolean(row?.aws_access_key_id?.trim() && row?.aws_secret_access_key?.trim() && row?.aws_region?.trim());
+		const hasLlm = Boolean(hasAnthropic || hasBedrock);
 		const isCompleted = Boolean(row?.onboarding_completed_at);
+		const currentStep = isCompleted ? 7 : hasLlm ? 5 : hasSlack ? 4 : hasIdentity ? 3 : hasAdmin ? 2 : 0;
 		return c.json({
 			completed: isCompleted,
-			currentStep: isCompleted ? 7 : hasAdmin ? 1 : 0,
+			currentStep,
+			adminEmail: row?.admin_email ?? null,
+			orgName: row?.org_name ?? null,
+			botName: row?.bot_name ?? "Sketch",
+			slackConnected: hasSlack,
+			llmConnected: hasLlm,
+			llmProvider: row?.llm_provider === "bedrock" ? "bedrock" : row?.llm_provider === "anthropic" ? "anthropic" : null,
 		});
 	});
 
@@ -118,8 +142,8 @@ export function setupRoutes(settings: SettingsRepo, deps: SetupDeps = {}) {
 
 	routes.post("/account", async (c) => {
 		const existing = await settings.get();
-		if (existing?.admin_email) {
-			return c.json({ error: { code: "CONFLICT", message: "Admin account already exists" } }, 409);
+		if (existing?.onboarding_completed_at) {
+			return c.json({ error: { code: "ONBOARDING_COMPLETE", message: "Setup is already complete" } }, 409);
 		}
 
 		const body = await c.req.json().catch(() => ({}));
@@ -130,8 +154,16 @@ export function setupRoutes(settings: SettingsRepo, deps: SetupDeps = {}) {
 		}
 
 		const passwordHash = await hashPassword(parsed.data.password);
-		await settings.create({ adminEmail: parsed.data.email, adminPasswordHash: passwordHash });
+		if (!existing?.admin_email) {
+			await settings.create({ adminEmail: parsed.data.email, adminPasswordHash: passwordHash });
+		} else {
+			await settings.update({
+				adminEmail: parsed.data.email,
+				adminPasswordHash: passwordHash,
+			});
+		}
 
+		createSession(c, parsed.data.email);
 		return c.json({ success: true });
 	});
 
@@ -196,6 +228,41 @@ export function setupRoutes(settings: SettingsRepo, deps: SetupDeps = {}) {
 			slackBotToken: botToken,
 			slackAppToken: appToken,
 		});
+
+		return c.json({ success: true });
+	});
+
+	routes.post("/llm/verify", async (c) => {
+		const existing = await settings.get();
+		if (!existing?.admin_email) {
+			return c.json(
+				{ error: { code: "SETUP_INCOMPLETE", message: "Admin account must be created before configuring LLM" } },
+				409,
+			);
+		}
+
+		const body = await c.req.json().catch(() => ({}));
+		const parsed = llmSchema.safeParse(body);
+		if (!parsed.success) {
+			const message = parsed.error.issues.map((i) => i.message).join(", ");
+			return c.json({ error: { code: "BAD_REQUEST", message } }, 400);
+		}
+
+		if (parsed.data.provider === "anthropic") {
+			try {
+				await verifyAnthropicApiKey(parsed.data.apiKey.trim());
+			} catch {
+				return c.json(
+					{
+						error: {
+							code: "INVALID_LLM_SETTINGS",
+							message: "Invalid LLM credentials. Check your API key and try again.",
+						},
+					},
+					400,
+				);
+			}
+		}
 
 		return c.json({ success: true });
 	});

@@ -23,6 +23,8 @@ export function createSettingsRepository(db: Kysely<DB>) {
 
 		async update(
 			data: Partial<{
+				adminEmail: string;
+				adminPasswordHash: string;
 				orgName: string;
 				botName: string;
 				onboardingCompletedAt: string;
@@ -36,6 +38,8 @@ export function createSettingsRepository(db: Kysely<DB>) {
 			}>,
 		) {
 			const updates: Record<string, string | null> = {};
+			if (data.adminEmail !== undefined) updates.admin_email = data.adminEmail;
+			if (data.adminPasswordHash !== undefined) updates.admin_password_hash = data.adminPasswordHash;
 			if (data.orgName !== undefined) updates.org_name = data.orgName;
 			if (data.botName !== undefined) updates.bot_name = data.botName;
 			if (data.onboardingCompletedAt !== undefined) updates.onboarding_completed_at = data.onboardingCompletedAt;

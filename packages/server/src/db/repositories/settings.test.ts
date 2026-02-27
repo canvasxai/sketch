@@ -53,4 +53,54 @@ describe("Settings repository", () => {
 		const row = await settings.get();
 		expect(row?.admin_email).toBe("a@b.com");
 	});
+
+	it("update() persists Slack and LLM settings fields", async () => {
+		await settings.create({ adminEmail: "a@b.com", adminPasswordHash: "hash" });
+		await settings.update({
+			slackBotToken: "xoxb-token",
+			slackAppToken: "xapp-token",
+			llmProvider: "bedrock",
+			anthropicApiKey: null,
+			awsAccessKeyId: "AKIA...",
+			awsSecretAccessKey: "secret",
+			awsRegion: "us-east-1",
+		});
+
+		const row = await settings.get();
+		expect(row?.slack_bot_token).toBe("xoxb-token");
+		expect(row?.slack_app_token).toBe("xapp-token");
+		expect(row?.llm_provider).toBe("bedrock");
+		expect(row?.anthropic_api_key).toBeNull();
+		expect(row?.aws_access_key_id).toBe("AKIA...");
+		expect(row?.aws_secret_access_key).toBe("secret");
+		expect(row?.aws_region).toBe("us-east-1");
+	});
+
+	it("update() allows clearing Slack and LLM credentials with null values", async () => {
+		await settings.create({ adminEmail: "a@b.com", adminPasswordHash: "hash" });
+		await settings.update({
+			slackBotToken: "xoxb-token",
+			slackAppToken: "xapp-token",
+			llmProvider: "anthropic",
+			anthropicApiKey: "sk-ant-key",
+		});
+		await settings.update({
+			slackBotToken: null,
+			slackAppToken: null,
+			llmProvider: null,
+			anthropicApiKey: null,
+			awsAccessKeyId: null,
+			awsSecretAccessKey: null,
+			awsRegion: null,
+		});
+
+		const row = await settings.get();
+		expect(row?.slack_bot_token).toBeNull();
+		expect(row?.slack_app_token).toBeNull();
+		expect(row?.llm_provider).toBeNull();
+		expect(row?.anthropic_api_key).toBeNull();
+		expect(row?.aws_access_key_id).toBeNull();
+		expect(row?.aws_secret_access_key).toBeNull();
+		expect(row?.aws_region).toBeNull();
+	});
 });

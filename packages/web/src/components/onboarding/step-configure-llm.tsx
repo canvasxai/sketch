@@ -1,10 +1,12 @@
 import { useState } from "react";
 
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type Provider = "anthropic" | "bedrock";
@@ -12,36 +14,20 @@ type Provider = "anthropic" | "bedrock";
 interface StepConfigureLLMProps {
 	initialProvider?: Provider;
 	initialConnected?: boolean;
-	initialAnthropicApiKey?: string;
-	initialAwsAccessKeyId?: string;
-	initialAwsSecretAccessKey?: string;
-	initialAwsRegion?: string;
 	onNext: (data: {
 		provider: Provider;
 		connected: boolean;
-		anthropicApiKey: string;
-		awsAccessKeyId: string;
-		awsSecretAccessKey: string;
-		awsRegion: string;
 	}) => void;
 }
 
 const bedrockRegions = ["us-east-1", "us-west-2", "eu-west-1", "eu-west-3", "ap-southeast-1", "ap-northeast-1"];
 
-export function StepConfigureLLM({
-	initialProvider,
-	initialConnected,
-	initialAnthropicApiKey,
-	initialAwsAccessKeyId,
-	initialAwsSecretAccessKey,
-	initialAwsRegion,
-	onNext,
-}: StepConfigureLLMProps) {
+export function StepConfigureLLM({ initialProvider, initialConnected, onNext }: StepConfigureLLMProps) {
 	const [provider, setProvider] = useState<Provider>(initialProvider ?? "anthropic");
-	const [apiKey, setApiKey] = useState(initialAnthropicApiKey ?? "");
-	const [awsAccessKey, setAwsAccessKey] = useState(initialAwsAccessKeyId ?? "");
-	const [awsSecretKey, setAwsSecretKey] = useState(initialAwsSecretAccessKey ?? "");
-	const [awsRegion, setAwsRegion] = useState(initialAwsRegion ?? "us-east-1");
+	const [apiKey, setApiKey] = useState("");
+	const [awsAccessKey, setAwsAccessKey] = useState("");
+	const [awsSecretKey, setAwsSecretKey] = useState("");
+	const [awsRegion, setAwsRegion] = useState("us-east-1");
 	const [isConnected, setIsConnected] = useState(initialConnected ?? false);
 	const [error, setError] = useState("");
 
@@ -49,10 +35,6 @@ export function StepConfigureLLM({
 		onNext({
 			provider,
 			connected: isConnected,
-			anthropicApiKey: apiKey.trim(),
-			awsAccessKeyId: awsAccessKey.trim(),
-			awsSecretAccessKey: awsSecretKey.trim(),
-			awsRegion,
 		});
 	};
 
@@ -61,13 +43,42 @@ export function StepConfigureLLM({
 			? apiKey.trim().length > 0
 			: awsAccessKey.trim().length > 0 && awsSecretKey.trim().length > 0 && awsRegion.trim().length > 0;
 
-	const isVerifying = false;
+	const llmMutation = useMutation({
+		mutationFn: async () => {
+			if (provider === "anthropic") {
+				const payload = { provider: "anthropic" as const, apiKey: apiKey.trim() };
+				await api.setup.verifyLlm(payload);
+				await api.setup.llm(payload);
+				return;
+			}
+
+			const payload = {
+				provider: "bedrock" as const,
+				awsAccessKeyId: awsAccessKey.trim(),
+				awsSecretAccessKey: awsSecretKey.trim(),
+				awsRegion: awsRegion.trim(),
+			};
+			await api.setup.verifyLlm(payload);
+			await api.setup.llm(payload);
+		},
+		onSuccess: () => {
+			setIsConnected(true);
+			setApiKey("");
+			setAwsAccessKey("");
+			setAwsSecretKey("");
+			toast.success(`Connected to ${provider === "anthropic" ? "Anthropic" : "AWS Bedrock"}, using Claude Sonnet.`);
+		},
+		onError: (err: Error) => {
+			setError(err.message);
+		},
+	});
+
+	const isVerifying = llmMutation.isPending;
 
 	const handleConnect = () => {
 		setError("");
 		if (!canConnect) return;
-		setIsConnected(true);
-		toast.success(`Connected to ${provider === "anthropic" ? "Anthropic" : "AWS Bedrock"}, using Claude Sonnet.`);
+		llmMutation.mutate();
 	};
 
 	return (

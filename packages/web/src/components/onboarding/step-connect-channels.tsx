@@ -22,13 +22,9 @@ interface StepConnectChannelsProps {
 	botName: string;
 	initialSlackConnected?: boolean;
 	initialSlackWorkspace?: string;
-	initialSlackBotToken?: string;
-	initialSlackAppToken?: string;
 	onNext: (data: {
 		slackConnected: boolean;
 		slackWorkspace?: string;
-		slackBotToken: string;
-		slackAppToken: string;
 		whatsappConnected: boolean;
 		whatsappPhone?: string;
 	}) => void;
@@ -38,25 +34,27 @@ export function StepConnectChannels({
 	botName,
 	initialSlackConnected,
 	initialSlackWorkspace,
-	initialSlackBotToken,
-	initialSlackAppToken,
 	onNext,
 }: StepConnectChannelsProps) {
 	const [channels, setChannels] = useState<ChannelState>({
 		slack: {
 			connected: Boolean(initialSlackConnected),
 			connecting: false,
-			workspaceName: initialSlackWorkspace,
+			workspaceName: initialSlackWorkspace ?? (initialSlackConnected ? "Workspace" : undefined),
 		},
 	});
 
-	const [slackBotToken, setSlackBotToken] = useState(initialSlackBotToken ?? "");
-	const [slackAppToken, setSlackAppToken] = useState(initialSlackAppToken ?? "");
+	const [slackBotToken, setSlackBotToken] = useState("");
+	const [slackAppToken, setSlackAppToken] = useState("");
 	const [manifestCopied, setManifestCopied] = useState(false);
 
 	const slackConnectMutation = useMutation({
 		mutationFn: async () => {
-			return api.setup.verifySlack(slackBotToken.trim(), slackAppToken.trim());
+			const botToken = slackBotToken.trim();
+			const appToken = slackAppToken.trim();
+			const verified = await api.setup.verifySlack(botToken, appToken);
+			await api.setup.slack(botToken, appToken);
+			return verified;
 		},
 		onSuccess: (result) => {
 			setChannels((prev) => ({
@@ -67,6 +65,8 @@ export function StepConnectChannels({
 					workspaceName: result.workspaceName ?? "Workspace",
 				},
 			}));
+			setSlackBotToken("");
+			setSlackAppToken("");
 			toast.success("Connected to Slack.");
 		},
 		onError: (error: Error) => {
@@ -176,8 +176,6 @@ export function StepConnectChannels({
 		onNext({
 			slackConnected: channels.slack.connected,
 			slackWorkspace: channels.slack.workspaceName,
-			slackBotToken: slackBotToken.trim(),
-			slackAppToken: slackAppToken.trim(),
 			whatsappConnected: false,
 			whatsappPhone: undefined,
 		});

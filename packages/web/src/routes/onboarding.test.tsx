@@ -174,6 +174,236 @@ describe("CreateAccountStep", () => {
 });
 
 describe("OnboardingPage navigation and flow", () => {
+	it("persists the latest account password after navigating back to Account", async () => {
+		const accountBodies: Array<{ email: string; password: string }> = [];
+		const loginBodies: Array<{ email: string; password: string }> = [];
+
+		server.use(
+			http.post("/api/setup/account", async ({ request }) => {
+				const body = (await request.json()) as { email: string; password: string };
+				accountBodies.push(body);
+				return HttpResponse.json({ success: true });
+			}),
+			http.post("/api/auth/login", async ({ request }) => {
+				const body = (await request.json()) as { email: string; password: string };
+				loginBodies.push(body);
+				return HttpResponse.json({ authenticated: true, email: body.email });
+			}),
+		);
+
+		const user = userEvent.setup();
+		renderWithProviders(<OnboardingPage />);
+
+		await user.type(screen.getByLabelText("Email"), "admin@test.com");
+		await user.type(screen.getByLabelText("Password"), "password123");
+		await user.type(screen.getByLabelText("Confirm password"), "password123");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Set up your bot")).toBeInTheDocument();
+		});
+
+		await user.click(screen.getByRole("button", { name: "Account" }));
+		expect(screen.getByText("Create your admin account")).toBeInTheDocument();
+		expect(screen.getByLabelText("Email")).toHaveValue("admin@test.com");
+
+		await user.type(screen.getByLabelText("Password"), "password456");
+		await user.type(screen.getByLabelText("Confirm password"), "password456");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Set up your bot")).toBeInTheDocument();
+		});
+
+		expect(accountBodies.map((b) => b.password)).toEqual(["password123", "password456"]);
+		expect(loginBodies.map((b) => b.password)).toEqual(["password123", "password456"]);
+	});
+
+	it("autosaves account edits when leaving Account via step navigation", async () => {
+		const accountBodies: Array<{ email: string; password: string }> = [];
+
+		server.use(
+			http.post("/api/setup/account", async ({ request }) => {
+				const body = (await request.json()) as { email: string; password: string };
+				accountBodies.push(body);
+				return HttpResponse.json({ success: true });
+			}),
+		);
+
+		const user = userEvent.setup();
+		renderWithProviders(<OnboardingPage />);
+
+		await user.type(screen.getByLabelText("Email"), "admin@test.com");
+		await user.type(screen.getByLabelText("Password"), "password123");
+		await user.type(screen.getByLabelText("Confirm password"), "password123");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Set up your bot")).toBeInTheDocument();
+		});
+
+		await user.click(screen.getByRole("button", { name: "Account" }));
+		expect(screen.getByText("Create your admin account")).toBeInTheDocument();
+		await user.type(screen.getByLabelText("Password"), "password456");
+		await user.type(screen.getByLabelText("Confirm password"), "password456");
+
+		await user.click(screen.getByRole("button", { name: "Identity" }));
+		await waitFor(() => {
+			expect(screen.getByText("Set up your bot")).toBeInTheDocument();
+		});
+
+		expect(accountBodies.map((b) => b.password)).toEqual(["password123", "password456"]);
+	});
+
+	it("persists the latest identity values after navigating back to Identity", async () => {
+		const identityBodies: Array<{ orgName: string; botName: string }> = [];
+
+		server.use(
+			http.post("/api/setup/identity", async ({ request }) => {
+				const body = (await request.json()) as { orgName: string; botName: string };
+				identityBodies.push(body);
+				return HttpResponse.json({ success: true });
+			}),
+		);
+
+		const user = userEvent.setup();
+		renderWithProviders(<OnboardingPage />);
+
+		await user.type(screen.getByLabelText("Email"), "admin@test.com");
+		await user.type(screen.getByLabelText("Password"), "password123");
+		await user.type(screen.getByLabelText("Confirm password"), "password123");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		await user.type(screen.getByLabelText("Organization Name"), "Acme");
+		await user.clear(screen.getByLabelText("Bot Name"));
+		await user.type(screen.getByLabelText("Bot Name"), "Sketch");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Connect your channels")).toBeInTheDocument();
+		});
+
+		await user.click(screen.getByRole("button", { name: "Identity" }));
+		expect(screen.getByText("Set up your bot")).toBeInTheDocument();
+		await user.clear(screen.getByLabelText("Organization Name"));
+		await user.type(screen.getByLabelText("Organization Name"), "Acme Labs");
+		await user.clear(screen.getByLabelText("Bot Name"));
+		await user.type(screen.getByLabelText("Bot Name"), "Sketch Pro");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Connect your channels")).toBeInTheDocument();
+		});
+
+		expect(identityBodies).toEqual([
+			{ orgName: "Acme", botName: "Sketch" },
+			{ orgName: "Acme Labs", botName: "Sketch Pro" },
+		]);
+	});
+
+	it("autosaves identity edits when leaving Identity via step navigation", async () => {
+		const identityBodies: Array<{ orgName: string; botName: string }> = [];
+
+		server.use(
+			http.post("/api/setup/identity", async ({ request }) => {
+				const body = (await request.json()) as { orgName: string; botName: string };
+				identityBodies.push(body);
+				return HttpResponse.json({ success: true });
+			}),
+			http.post("/api/setup/slack/verify", () => {
+				return HttpResponse.json({ success: true, workspaceName: "Test Workspace" });
+			}),
+		);
+
+		const user = userEvent.setup();
+		renderWithProviders(<OnboardingPage />);
+
+		await user.type(screen.getByLabelText("Email"), "admin@test.com");
+		await user.type(screen.getByLabelText("Password"), "password123");
+		await user.type(screen.getByLabelText("Confirm password"), "password123");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		await user.type(screen.getByLabelText("Organization Name"), "Acme");
+		await user.clear(screen.getByLabelText("Bot Name"));
+		await user.type(screen.getByLabelText("Bot Name"), "Sketch");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Connect your channels")).toBeInTheDocument();
+		});
+
+		await user.click(screen.getByRole("button", { name: "Identity" }));
+		await waitFor(() => {
+			expect(screen.getByText("Set up your bot")).toBeInTheDocument();
+		});
+		await user.clear(screen.getByLabelText("Organization Name"));
+		await user.type(screen.getByLabelText("Organization Name"), "Acme Labs");
+		await user.clear(screen.getByLabelText("Bot Name"));
+		await user.type(screen.getByLabelText("Bot Name"), "Sketch Pro");
+
+		await user.click(screen.getByRole("button", { name: "Channels" }));
+		await waitFor(() => {
+			expect(screen.getByText("Connect your channels")).toBeInTheDocument();
+		});
+
+		expect(identityBodies).toEqual([
+			{ orgName: "Acme", botName: "Sketch" },
+			{ orgName: "Acme Labs", botName: "Sketch Pro" },
+		]);
+	});
+
+	it("uses updated identity values in later onboarding steps", async () => {
+		server.use(
+			http.post("/api/setup/slack/verify", () => {
+				return HttpResponse.json({ success: true, workspaceName: "Test Workspace" });
+			}),
+			http.post("/api/setup/llm/verify", () => {
+				return HttpResponse.json({ success: true });
+			}),
+			http.post("/api/setup/llm", () => {
+				return HttpResponse.json({ success: true });
+			}),
+		);
+
+		const user = userEvent.setup();
+		renderWithProviders(<OnboardingPage />);
+
+		await user.type(screen.getByLabelText("Email"), "admin@test.com");
+		await user.type(screen.getByLabelText("Password"), "password123");
+		await user.type(screen.getByLabelText("Confirm password"), "password123");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		await user.type(screen.getByLabelText("Organization Name"), "Acme");
+		await user.clear(screen.getByLabelText("Bot Name"));
+		await user.type(screen.getByLabelText("Bot Name"), "Sketch");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Connect your channels")).toBeInTheDocument();
+		});
+
+		await user.click(screen.getByRole("button", { name: "Identity" }));
+		await user.clear(screen.getByLabelText("Organization Name"));
+		await user.type(screen.getByLabelText("Organization Name"), "Acme Labs");
+		await user.clear(screen.getByLabelText("Bot Name"));
+		await user.type(screen.getByLabelText("Bot Name"), "Sketch Pro");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Connect your channels")).toBeInTheDocument();
+		});
+
+		await user.type(screen.getByLabelText("Bot Token"), "xoxb-test-bot-token");
+		await user.type(screen.getByLabelText("App-Level Token"), "xapp-test-app-token");
+		await user.click(screen.getByRole("button", { name: "Connect" }));
+		await waitFor(() => {
+			expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+		});
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		await user.type(screen.getByLabelText("API Key"), "sk-ant-test-key");
+		await user.click(screen.getByRole("button", { name: "Connect" }));
+		await waitFor(() => {
+			expect(screen.getByRole("button", { name: "Continue" })).toBeInTheDocument();
+		});
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		expect(screen.getByText("Test your setup")).toBeInTheDocument();
+		expect(screen.getByText(/@Sketch Pro/)).toBeInTheDocument();
+	});
+
 	it("allows navigating back to Account step from progress indicator", async () => {
 		server.use(
 			http.post("/api/setup/slack/verify", () => {
@@ -208,29 +438,28 @@ describe("OnboardingPage navigation and flow", () => {
 		expect(screen.getByText("Create your admin account")).toBeInTheDocument();
 	});
 
-	it("restores onboarding step from draft after remount", async () => {
-		const user = userEvent.setup();
-		const { unmount } = renderWithProviders(<OnboardingPage />);
+	it("resumes from backend-provided setup status", () => {
+		renderWithProviders(
+			<OnboardingPage
+				initialSetupStatus={{
+					completed: false,
+					currentStep: 4,
+					adminEmail: "admin@test.com",
+					orgName: "Acme",
+					botName: "Sketch",
+					slackConnected: true,
+					llmConnected: false,
+					llmProvider: null,
+				}}
+			/>,
+		);
 
-		await user.type(screen.getByLabelText("Email"), "admin@test.com");
-		await user.type(screen.getByLabelText("Password"), "password123");
-		await user.type(screen.getByLabelText("Confirm password"), "password123");
-		await user.click(screen.getByRole("button", { name: "Continue" }));
-
-		expect(screen.getByText("Set up your bot")).toBeInTheDocument();
-
-		unmount();
-		renderWithProviders(<OnboardingPage />);
-		expect(screen.getByText("Set up your bot")).toBeInTheDocument();
+		expect(screen.getByText("Connect your LLM")).toBeInTheDocument();
 	});
 
 	it("finalizes setup in expected order and navigates to channels", async () => {
 		const calls: string[] = [];
 		server.use(
-			http.get("/api/setup/status", () => {
-				calls.push("status");
-				return HttpResponse.json({ completed: false, currentStep: 0 });
-			}),
 			http.post("/api/setup/account", () => {
 				calls.push("account");
 				return HttpResponse.json({ success: true });
@@ -240,10 +469,15 @@ describe("OnboardingPage navigation and flow", () => {
 				return HttpResponse.json({ success: true });
 			}),
 			http.post("/api/setup/slack/verify", () => {
+				calls.push("slack-verify");
 				return HttpResponse.json({ success: true, workspaceName: "Test Workspace" });
 			}),
 			http.post("/api/setup/slack", () => {
 				calls.push("slack");
+				return HttpResponse.json({ success: true });
+			}),
+			http.post("/api/setup/llm/verify", () => {
+				calls.push("llm-verify");
 				return HttpResponse.json({ success: true });
 			}),
 			http.post("/api/setup/llm", () => {
@@ -256,6 +490,10 @@ describe("OnboardingPage navigation and flow", () => {
 			}),
 			http.post("/api/auth/login", () => {
 				calls.push("login");
+				return HttpResponse.json({ authenticated: true, email: "admin@test.com" });
+			}),
+			http.get("/api/auth/session", () => {
+				calls.push("session");
 				return HttpResponse.json({ authenticated: true, email: "admin@test.com" });
 			}),
 		);
@@ -305,6 +543,16 @@ describe("OnboardingPage navigation and flow", () => {
 			expect(mockNavigate).toHaveBeenCalledWith({ to: "/channels" });
 		});
 
-		expect(calls).toEqual(["status", "account", "identity", "slack", "llm", "complete", "login"]);
+		expect(calls).toEqual([
+			"account",
+			"login",
+			"identity",
+			"slack-verify",
+			"slack",
+			"llm-verify",
+			"llm",
+			"complete",
+			"session",
+		]);
 	});
 });

@@ -7,7 +7,16 @@ import { setupServer } from "msw/node";
  */
 export const handlers = [
 	http.get("/api/setup/status", () => {
-		return HttpResponse.json({ completed: false, currentStep: 0 });
+		return HttpResponse.json({
+			completed: false,
+			currentStep: 0,
+			adminEmail: null,
+			orgName: null,
+			botName: "Sketch",
+			slackConnected: false,
+			llmConnected: false,
+			llmProvider: null,
+		});
 	}),
 
 	http.post("/api/setup/account", async ({ request }) => {
