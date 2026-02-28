@@ -400,8 +400,7 @@ describe("OnboardingPage navigation and flow", () => {
 		});
 		await user.click(screen.getByRole("button", { name: "Continue" }));
 
-		expect(screen.getByText("Test your setup")).toBeInTheDocument();
-		expect(screen.getByText(/@Sketch Pro/)).toBeInTheDocument();
+		expect(screen.getByText("Sketch is ready")).toBeInTheDocument();
 	});
 
 	it("allows navigating back to Account step from progress indicator", async () => {
@@ -530,13 +529,7 @@ describe("OnboardingPage navigation and flow", () => {
 		});
 		await user.click(screen.getByRole("button", { name: "Continue" }));
 
-		// Step 5
-		await user.click(screen.getByRole("button", { name: "Skip" }));
-
-		// Step 6
-		await user.click(screen.getByRole("button", { name: "Skip for now" }));
-
-		// Step 7
+		// Completion
 		await user.click(screen.getByRole("button", { name: "Go to Dashboard" }));
 
 		await waitFor(() => {

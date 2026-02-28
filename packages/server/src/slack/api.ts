@@ -4,7 +4,10 @@ export interface SlackAuthTestResponse {
 	team?: string;
 }
 
-export async function slackApiCall(token: string, endpoint: "auth.test"): Promise<SlackAuthTestResponse> {
+export async function slackApiCall(
+	token: string,
+	endpoint: "auth.test" | "apps.connections.open",
+): Promise<SlackAuthTestResponse> {
 	const response = await fetch(`https://slack.com/api/${endpoint}`, {
 		method: "POST",
 		headers: {

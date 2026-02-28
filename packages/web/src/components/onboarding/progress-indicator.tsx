@@ -7,8 +7,6 @@ const steps = [
 	{ number: 2, label: "Identity" },
 	{ number: 3, label: "Channels" },
 	{ number: 4, label: "LLM" },
-	{ number: 5, label: "Test" },
-	{ number: 6, label: "Team" },
 ];
 
 interface ProgressIndicatorProps {
