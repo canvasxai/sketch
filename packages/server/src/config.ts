@@ -3,6 +3,7 @@
  * Uses zod for schema validation and dotenv for .env file loading.
  * Fails fast on startup with all errors printed at once.
  */
+import { dirname, isAbsolute, resolve } from "node:path";
 import { z } from "zod";
 import "dotenv/config";
 
@@ -36,7 +37,19 @@ export function loadConfig(): Config {
 		}
 		process.exit(1);
 	}
-	return result.data;
+	const config = result.data;
+
+	// Resolve relative paths against the project root (dirname of .env file)
+	// so they work regardless of cwd (e.g. when concurrently runs from packages/server/).
+	const projectRoot = process.env.DOTENV_CONFIG_PATH ? dirname(process.env.DOTENV_CONFIG_PATH) : process.cwd();
+	if (!isAbsolute(config.DATA_DIR)) {
+		config.DATA_DIR = resolve(projectRoot, config.DATA_DIR);
+	}
+	if (!isAbsolute(config.SQLITE_PATH)) {
+		config.SQLITE_PATH = resolve(projectRoot, config.SQLITE_PATH);
+	}
+
+	return config;
 }
 
 /**

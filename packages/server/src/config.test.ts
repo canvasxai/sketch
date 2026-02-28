@@ -1,5 +1,6 @@
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { configSchema, validateConfig } from "./config";
+import { configSchema, loadConfig, validateConfig } from "./config";
 import type { Config } from "./config";
 
 describe("configSchema", () => {
@@ -67,6 +68,38 @@ describe("configSchema", () => {
 			const result = configSchema.safeParse({ LOG_LEVEL: "trace" });
 			expect(result.success).toBe(false);
 		});
+	});
+});
+
+describe("loadConfig", () => {
+	afterEach(() => {
+		vi.unstubAllEnvs();
+	});
+
+	it("resolves DATA_DIR and SQLITE_PATH relative to DOTENV_CONFIG_PATH dir", () => {
+		vi.stubEnv("DOTENV_CONFIG_PATH", "/project/root/.env");
+		vi.stubEnv("DATA_DIR", "./data");
+		vi.stubEnv("SQLITE_PATH", "./data/sketch.db");
+		const config = loadConfig();
+		expect(config.DATA_DIR).toBe("/project/root/data");
+		expect(config.SQLITE_PATH).toBe("/project/root/data/sketch.db");
+	});
+
+	it("resolves relative paths against cwd when DOTENV_CONFIG_PATH is not set", () => {
+		vi.stubEnv("DOTENV_CONFIG_PATH", "");
+		vi.stubEnv("DATA_DIR", "./data");
+		vi.stubEnv("SQLITE_PATH", "./data/sketch.db");
+		const config = loadConfig();
+		expect(config.DATA_DIR).toBe(resolve(process.cwd(), "./data"));
+		expect(config.SQLITE_PATH).toBe(resolve(process.cwd(), "./data/sketch.db"));
+	});
+
+	it("leaves absolute paths unchanged", () => {
+		vi.stubEnv("DATA_DIR", "/absolute/data");
+		vi.stubEnv("SQLITE_PATH", "/absolute/data/sketch.db");
+		const config = loadConfig();
+		expect(config.DATA_DIR).toBe("/absolute/data");
+		expect(config.SQLITE_PATH).toBe("/absolute/data/sketch.db");
 	});
 });
 

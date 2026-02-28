@@ -89,7 +89,7 @@ sketch/
 Internal planning docs live in `.planning/` (gitignored):
 
 - **PRODUCT.md** — high-level product document. The "what and why". Evolves slowly.
-- **STATE.md** — current project state, what's done, next steps, current version. Updated at end of each work session. Quick context resume for new sessions.
+- **STATE.md** — current project state, what's done, next steps, current version. Updated at end of every feature implementation and at end of each work session. Quick context resume for new sessions.
 - **Task files** — one per feature/story (e.g., `STEEL_THREAD.md`, `WHATSAPP_ADAPTER.md`). Implementation plans with phases. Become historical reference once done.
 - **TODO.md** — tracked todos and backlog items. Lives in `.planning/TODO.md`.
 
