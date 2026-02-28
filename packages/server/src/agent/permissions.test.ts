@@ -109,7 +109,7 @@ describe("createCanUseTool", () => {
 		});
 	});
 
-	describe("file tools — ~/.claude read-only access", () => {
+	describe("file tools — ~/.claude access", () => {
 		it("allows Read tool with ~/.claude/skills/canvas/SKILL.md", async () => {
 			const result = await canUseTool("Read", { file_path: `${CLAUDE_DIR}/skills/canvas/SKILL.md` });
 			expect(result.behavior).toBe("allow");
@@ -125,16 +125,14 @@ describe("createCanUseTool", () => {
 			expect(result.behavior).toBe("allow");
 		});
 
-		it("denies Write tool with ~/.claude/skills/something", async () => {
-			const result = await canUseTool("Write", { file_path: `${CLAUDE_DIR}/skills/something` });
-			expectDeny(result);
-			expect(result.message).toContain("outside your workspace");
+		it("allows Write tool with ~/.claude/CLAUDE.md (org memory)", async () => {
+			const result = await canUseTool("Write", { file_path: `${CLAUDE_DIR}/CLAUDE.md` });
+			expect(result.behavior).toBe("allow");
 		});
 
-		it("denies Edit tool with ~/.claude/CLAUDE.md", async () => {
+		it("allows Edit tool with ~/.claude/CLAUDE.md (org memory)", async () => {
 			const result = await canUseTool("Edit", { file_path: `${CLAUDE_DIR}/CLAUDE.md` });
-			expectDeny(result);
-			expect(result.message).toContain("outside your workspace");
+			expect(result.behavior).toBe("allow");
 		});
 	});
 

@@ -163,6 +163,52 @@ describe("buildSystemContext", () => {
 		});
 	});
 
+	describe("memory", () => {
+		it("includes memory section in DM context", () => {
+			const result = buildSystemContext({
+				platform: "slack",
+				userName: "Alice",
+				workspaceDir: "/data/workspaces/u123",
+			});
+			expect(result).toContain("## Memory");
+			expect(result).toContain("Personal memory");
+			expect(result).toContain("Org memory");
+			expect(result).toContain("~/.claude/CLAUDE.md");
+		});
+
+		it("includes concise writing instruction", () => {
+			const result = buildSystemContext({
+				platform: "slack",
+				userName: "Alice",
+				workspaceDir: "/data/workspaces/u123",
+			});
+			expect(result).toContain("single concise line");
+			expect(result).toContain("topic headings");
+		});
+
+		it("does not include shared memory note in DM context", () => {
+			const result = buildSystemContext({
+				platform: "slack",
+				userName: "Alice",
+				workspaceDir: "/data/workspaces/u123",
+			});
+			expect(result).not.toContain("shared by all users");
+		});
+
+		it("includes shared memory note in channel context", () => {
+			const result = buildSystemContext({
+				platform: "slack",
+				userName: "Alice",
+				workspaceDir: "/data/workspaces/channel-C001",
+				channelContext: {
+					channelName: "general",
+					recentMessages: [],
+				},
+			});
+			expect(result).toContain("shared by all users");
+		});
+	});
+
 	describe("channel context with empty recent messages", () => {
 		const result = buildSystemContext({
 			platform: "slack",

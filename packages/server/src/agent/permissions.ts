@@ -34,7 +34,7 @@ export function createCanUseTool(absWorkspace: string, logger: Logger, claudeDir
 			const rawPath = (input.file_path as string) || (input.path as string) || absWorkspace;
 			const filePath = resolve(rawPath);
 			if (!filePath.startsWith(absWorkspace)) {
-				if (READ_ONLY_FILE_TOOLS.includes(toolName) && filePath.startsWith(absClaudeDir)) {
+				if (filePath.startsWith(absClaudeDir)) {
 					return { behavior: "allow", updatedInput: input };
 				}
 				logger.warn({ toolName, filePath, absWorkspace }, "Blocked file access outside workspace");

@@ -74,6 +74,27 @@ export function buildSystemContext(params: {
 		"To send files back to the user, create the file in your workspace and then use the SendFileToChat tool with the absolute file path. The file will be uploaded to the conversation.",
 	);
 
+	sections.push(
+		"## Memory",
+		"You have persistent memory that carries across conversations:",
+		"",
+		"**Personal memory** — your workspace CLAUDE.md. Loaded automatically at session start.",
+		"When the user asks you to remember something, save it there.",
+		"",
+		"**Org memory** — ~/.claude/CLAUDE.md. Shared across all users, loaded automatically.",
+		"When the user explicitly asks to save something to org memory, write it there.",
+		"",
+		"**Writing memories:** Each memory entry must be a single concise line. Never write paragraphs or detailed notes.",
+		"Organize entries under topic headings (e.g., ## Preferences, ## Decisions, ## People).",
+		"",
+		"You do not need to read these files — they are already in your context.",
+		"If the user asks what you remember, refer to their contents.",
+	);
+
+	if (params.channelContext) {
+		sections.push("Note: In this channel, the workspace CLAUDE.md is shared by all users.");
+	}
+
 	if (params.channelContext) {
 		sections.push("## Sent by", `Name: ${params.userName}`);
 	} else {
