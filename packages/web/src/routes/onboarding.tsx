@@ -3,8 +3,6 @@ import { StepBotIdentity } from "@/components/onboarding/step-bot-identity";
 import { StepCompletion } from "@/components/onboarding/step-completion";
 import { StepConfigureLLM } from "@/components/onboarding/step-configure-llm";
 import { StepConnectChannels } from "@/components/onboarding/step-connect-channels";
-import { StepInviteTeam } from "@/components/onboarding/step-invite-team";
-import { StepTestSetup } from "@/components/onboarding/step-test-setup";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -52,7 +50,7 @@ export function OnboardingPage({ initialSetupStatus }: { initialSetupStatus?: Se
 	const initialStep = setupStatus.currentStep > 0 ? setupStatus.currentStep : 1;
 
 	const [currentStep, setCurrentStep] = useState(initialStep);
-	const [maxStepReached, setMaxStepReached] = useState(Math.min(initialStep, 6));
+	const [maxStepReached, setMaxStepReached] = useState(Math.min(initialStep, 4));
 	const [isStepAutosaving, setIsStepAutosaving] = useState(false);
 
 	const [draftAdminEmail, setDraftAdminEmail] = useState(setupStatus.adminEmail ?? "");
@@ -67,11 +65,8 @@ export function OnboardingPage({ initialSetupStatus }: { initialSetupStatus?: Se
 	const [slackConnected, setSlackConnected] = useState(setupStatus.slackConnected);
 	const [slackWorkspace, setSlackWorkspace] = useState<string | undefined>(undefined);
 
-	const [whatsappConnected, setWhatsappConnected] = useState(false);
-	const [whatsappPhone, setWhatsappPhone] = useState<string | undefined>(undefined);
 	const [llmProvider, setLlmProvider] = useState<"anthropic" | "bedrock">(setupStatus.llmProvider ?? "anthropic");
 	const [llmConnected, setLlmConnected] = useState(setupStatus.llmConnected);
-	const [invitedCount, setInvitedCount] = useState(0);
 
 	const goToStep = (nextStep: number) => {
 		setCurrentStep(nextStep);
@@ -83,11 +78,11 @@ export function OnboardingPage({ initialSetupStatus }: { initialSetupStatus?: Se
 		botName,
 		slackConnected,
 		slackWorkspace,
-		whatsappConnected,
-		whatsappPhone,
+		whatsappConnected: false,
+		whatsappPhone: undefined,
 		llmProvider,
 		llmConnected,
-		invitedCount,
+		invitedCount: 0,
 	};
 
 	const finishMutation = useMutation({
@@ -244,16 +239,9 @@ export function OnboardingPage({ initialSetupStatus }: { initialSetupStatus?: Se
 					botName={botName}
 					initialSlackConnected={slackConnected}
 					initialSlackWorkspace={slackWorkspace}
-					onNext={({
-						slackConnected: slackOk,
-						slackWorkspace: workspace,
-						whatsappConnected: waOk,
-						whatsappPhone: waPhone,
-					}) => {
+					onNext={({ slackConnected: slackOk, slackWorkspace: workspace }) => {
 						setSlackConnected(slackOk);
 						setSlackWorkspace(workspace);
-						setWhatsappConnected(waOk);
-						setWhatsappPhone(waPhone);
 						goToStep(4);
 					}}
 				/>
@@ -268,35 +256,6 @@ export function OnboardingPage({ initialSetupStatus }: { initialSetupStatus?: Se
 						setLlmProvider(provider);
 						setLlmConnected(connected);
 						goToStep(5);
-					}}
-				/>
-			);
-			break;
-		case 5:
-			content = (
-				<StepTestSetup
-					botName={botName}
-					organizationName={organizationName}
-					slackConnected={slackConnected}
-					whatsappConnected={whatsappConnected}
-					whatsappPhone={whatsappPhone}
-					onNext={() => goToStep(6)}
-					onSkip={() => goToStep(6)}
-				/>
-			);
-			break;
-		case 6:
-			content = (
-				<StepInviteTeam
-					slackConnected={slackConnected}
-					whatsappConnected={whatsappConnected}
-					onFinish={(count) => {
-						setInvitedCount(count);
-						goToStep(7);
-					}}
-					onSkip={() => {
-						setInvitedCount(0);
-						goToStep(7);
 					}}
 				/>
 			);
@@ -320,10 +279,10 @@ export function OnboardingPage({ initialSetupStatus }: { initialSetupStatus?: Se
 				<span className="text-lg font-semibold tracking-tight">Sketch</span>
 			</div>
 
-			{currentStep <= 6 && (
+			{currentStep <= 4 && (
 				<ProgressIndicator
-					currentStep={Math.min(currentStep, 6)}
-					maxStepReached={Math.min(maxStepReached, 6)}
+					currentStep={Math.min(currentStep, 4)}
+					maxStepReached={Math.min(maxStepReached, 4)}
 					onStepClick={handleStepClick}
 				/>
 			)}
@@ -390,7 +349,7 @@ export function CreateAccountStep({
 		<Card className="w-full max-w-[480px]">
 			<CardHeader className="text-center">
 				<h1 className="text-xl font-semibold">Create your admin account</h1>
-				<p className="text-sm text-muted-foreground">We’ll securely save your credentials now.</p>
+				<p className="text-sm text-muted-foreground">We'll securely save your credentials now.</p>
 			</CardHeader>
 			<CardContent>
 				<form onSubmit={handleSubmit} className="space-y-4">

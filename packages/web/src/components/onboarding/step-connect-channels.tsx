@@ -113,7 +113,6 @@ export function StepConnectChannels({
 					},
 				},
 				oauth_config: {
-					redirect_urls: ["https://knurliest-unforgetfully-tori.ngrok-free.dev/api/slack/callback"],
 					scopes: {
 						bot: [
 							"app_mentions:read",
@@ -138,7 +137,6 @@ export function StepConnectChannels({
 				},
 				settings: {
 					event_subscriptions: {
-						request_url: "https://knurliest-unforgetfully-tori.ngrok-free.dev/api/slack/events",
 						bot_events: ["app_mention", "message.channels", "message.groups", "message.im", "message.mpim"],
 					},
 					interactivity: {

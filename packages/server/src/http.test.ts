@@ -522,18 +522,19 @@ describe("Setup endpoints", () => {
 	});
 
 	describe("POST /api/setup/slack/verify", () => {
-		it("verifies Slack tokens using auth.test without opening a connection", async () => {
+		it("verifies Slack tokens using auth.test and apps.connections.open", async () => {
 			await seedAdmin(db);
 			const app = createApp(db, config);
 			const cookie = await loginAdmin(app);
 			const botToken = "xoxb-valid-token";
 			const appToken = "xapp-valid-token";
 
-			fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-				new Response(JSON.stringify({ ok: true, team: "Test Workspace" }), {
-					status: 200,
-					headers: { "Content-Type": "application/json" },
-				}) as Response,
+			fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+				async () =>
+					new Response(JSON.stringify({ ok: true, team: "Test Workspace" }), {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					}),
 			);
 
 			const res = await app.request("/api/setup/slack/verify", {
@@ -547,12 +548,17 @@ describe("Setup endpoints", () => {
 			expect(body.success).toBe(true);
 			expect(body.workspaceName).toBe("Test Workspace");
 
-			expect(fetchSpy).toHaveBeenCalledTimes(1);
-			const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
-			expect(url).toBe("https://slack.com/api/auth.test");
-			expect(options.method).toBe("POST");
-			expect(options.headers).toMatchObject({
+			expect(fetchSpy).toHaveBeenCalledTimes(2);
+			const [authUrl, authOptions] = fetchSpy.mock.calls[0] as [string, RequestInit];
+			expect(authUrl).toBe("https://slack.com/api/auth.test");
+			expect(authOptions.method).toBe("POST");
+			expect(authOptions.headers).toMatchObject({
 				Authorization: `Bearer ${botToken}`,
+			});
+			const [connUrl, connOptions] = fetchSpy.mock.calls[1] as [string, RequestInit];
+			expect(connUrl).toBe("https://slack.com/api/apps.connections.open");
+			expect(connOptions.headers).toMatchObject({
+				Authorization: `Bearer ${appToken}`,
 			});
 		});
 

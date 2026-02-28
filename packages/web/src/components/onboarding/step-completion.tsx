@@ -10,7 +10,6 @@ interface OnboardingData {
 	whatsappConnected: boolean;
 	whatsappPhone?: string;
 	llmProvider: "anthropic" | "bedrock";
-	invitedCount: number;
 }
 
 interface StepCompletionProps {
@@ -43,14 +42,6 @@ export function StepCompletion({ data, onGoToDashboard, isFinishing }: StepCompl
 			label: "LLM",
 			value: data.llmProvider === "anthropic" ? "Anthropic (Sonnet)" : "AWS Bedrock (Sonnet)",
 			connected: true,
-		},
-		{
-			label: "Team",
-			value:
-				data.invitedCount > 0
-					? `${data.invitedCount} member${data.invitedCount > 1 ? "s" : ""} invited`
-					: "No team members yet",
-			connected: data.invitedCount > 0,
 		},
 	] as const;
 
