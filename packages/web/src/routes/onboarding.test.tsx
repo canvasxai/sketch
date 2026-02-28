@@ -3,8 +3,8 @@ import { renderWithProviders } from "@/test/utils";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { describe, expect, it, vi } from "vitest";
-import { CreateAccountStep } from "./onboarding";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CreateAccountStep, OnboardingPage } from "./onboarding";
 
 const mockNavigate = vi.fn();
 vi.mock("@tanstack/react-router", async () => {
@@ -12,9 +12,14 @@ vi.mock("@tanstack/react-router", async () => {
 	return { ...actual, useNavigate: () => mockNavigate };
 });
 
+beforeEach(() => {
+	mockNavigate.mockReset();
+	window.sessionStorage.clear();
+});
+
 describe("CreateAccountStep", () => {
 	it("renders email, password, and confirm password fields", () => {
-		renderWithProviders(<CreateAccountStep />);
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
 
 		expect(screen.getByLabelText("Email")).toBeInTheDocument();
 		expect(screen.getByLabelText("Password")).toBeInTheDocument();
@@ -23,7 +28,7 @@ describe("CreateAccountStep", () => {
 
 	it("shows validation error for empty email on submit", async () => {
 		const user = userEvent.setup();
-		renderWithProviders(<CreateAccountStep />);
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
 
 		await user.click(screen.getByRole("button", { name: "Continue" }));
 		expect(screen.getByText("Email is required")).toBeInTheDocument();
@@ -31,7 +36,7 @@ describe("CreateAccountStep", () => {
 
 	it("shows validation error for invalid email format", async () => {
 		const user = userEvent.setup();
-		renderWithProviders(<CreateAccountStep />);
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
 
 		// "user@domain" passes HTML5 type="email" constraint but fails our regex
 		// which requires a dot in the domain part
@@ -45,7 +50,7 @@ describe("CreateAccountStep", () => {
 
 	it("shows validation error for short password", async () => {
 		const user = userEvent.setup();
-		renderWithProviders(<CreateAccountStep />);
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
 
 		await user.type(screen.getByLabelText("Email"), "admin@test.com");
 		await user.type(screen.getByLabelText("Password"), "short");
@@ -55,9 +60,20 @@ describe("CreateAccountStep", () => {
 		expect(screen.getByText("Password must be at least 8 characters")).toBeInTheDocument();
 	});
 
+	it("shows validation error when password is missing", async () => {
+		const user = userEvent.setup();
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
+
+		await user.type(screen.getByLabelText("Email"), "admin@test.com");
+		await user.type(screen.getByLabelText("Confirm password"), "password123");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		expect(screen.getByText("Password is required")).toBeInTheDocument();
+	});
+
 	it("shows validation error when passwords don't match", async () => {
 		const user = userEvent.setup();
-		renderWithProviders(<CreateAccountStep />);
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
 
 		await user.type(screen.getByLabelText("Email"), "admin@test.com");
 		await user.type(screen.getByLabelText("Password"), "password123");
@@ -67,67 +83,77 @@ describe("CreateAccountStep", () => {
 		expect(screen.getByText("Passwords do not match")).toBeInTheDocument();
 	});
 
-	it("submits successfully with valid data", async () => {
-		server.use(
-			http.post("/api/setup/account", async ({ request }) => {
-				await new Promise((resolve) => setTimeout(resolve, 100));
-				const body = (await request.json()) as { email?: string; password?: string };
-				if (!body.email || !body.password) {
-					return HttpResponse.json(
-						{ error: { code: "BAD_REQUEST", message: "Email and password required" } },
-						{ status: 400 },
-					);
-				}
-				return HttpResponse.json({ success: true });
-			}),
+	it("prefills form from initialEmail and initialPassword props", () => {
+		renderWithProviders(
+			<CreateAccountStep initialEmail="prefill@test.com" initialPassword="password123" onComplete={() => {}} />,
 		);
 
-		const user = userEvent.setup();
-		renderWithProviders(<CreateAccountStep />);
+		expect(screen.getByLabelText("Email")).toHaveValue("prefill@test.com");
+		expect(screen.getByLabelText("Password")).toHaveValue("password123");
+		expect(screen.getByLabelText("Confirm password")).toHaveValue("");
+	});
 
-		await user.type(screen.getByLabelText("Email"), "admin@test.com");
-		await user.type(screen.getByLabelText("Password"), "password123");
+	it("uses prefilled values when submitting", async () => {
+		const user = userEvent.setup();
+		const onComplete = vi.fn();
+		renderWithProviders(
+			<CreateAccountStep initialEmail="prefill@test.com" initialPassword="password123" onComplete={onComplete} />,
+		);
+
 		await user.type(screen.getByLabelText("Confirm password"), "password123");
 		await user.click(screen.getByRole("button", { name: "Continue" }));
 
 		await waitFor(() => {
-			expect(screen.getByText("Creating account...")).toBeInTheDocument();
+			expect(onComplete).toHaveBeenCalledTimes(1);
+		});
+		expect(onComplete).toHaveBeenCalledWith({
+			email: "prefill@test.com",
+			password: "password123",
 		});
 	});
 
-	it("shows API error on 409 conflict", async () => {
-		server.use(
-			http.post("/api/setup/account", () => {
-				return HttpResponse.json(
-					{ error: { code: "CONFLICT", message: "Admin account already exists" } },
-					{ status: 409 },
-				);
-			}),
-		);
-
+	it("calls onComplete with trimmed email and password for valid data", async () => {
 		const user = userEvent.setup();
-		renderWithProviders(<CreateAccountStep />);
+		const onComplete = vi.fn();
+		renderWithProviders(<CreateAccountStep onComplete={onComplete} />);
 
-		await user.type(screen.getByLabelText("Email"), "admin@test.com");
+		await user.type(screen.getByLabelText("Email"), "  admin@test.com  ");
 		await user.type(screen.getByLabelText("Password"), "password123");
 		await user.type(screen.getByLabelText("Confirm password"), "password123");
 		await user.click(screen.getByRole("button", { name: "Continue" }));
 
 		await waitFor(() => {
-			expect(screen.getByText("Admin account already exists")).toBeInTheDocument();
+			expect(onComplete).toHaveBeenCalledTimes(1);
+		});
+		expect(onComplete).toHaveBeenCalledWith({
+			email: "admin@test.com",
+			password: "password123",
 		});
 	});
 
-	it("disables submit button while request is in flight", async () => {
-		server.use(
-			http.post("/api/setup/account", async () => {
-				await new Promise((resolve) => setTimeout(resolve, 100));
-				return HttpResponse.json({ success: true });
-			}),
-		);
-
+	it("does not call onComplete when validation fails", async () => {
 		const user = userEvent.setup();
-		renderWithProviders(<CreateAccountStep />);
+		const onComplete = vi.fn();
+		renderWithProviders(<CreateAccountStep onComplete={onComplete} />);
+
+		await user.type(screen.getByLabelText("Email"), "not-an-email");
+		await user.type(screen.getByLabelText("Password"), "password123");
+		await user.type(screen.getByLabelText("Confirm password"), "different123");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		await waitFor(() => {
+			expect(onComplete).not.toHaveBeenCalled();
+		});
+	});
+
+	it("clears prior validation errors after correcting input", async () => {
+		const user = userEvent.setup();
+		const onComplete = vi.fn();
+		renderWithProviders(<CreateAccountStep onComplete={onComplete} />);
+
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		expect(screen.getByText("Email is required")).toBeInTheDocument();
+		expect(screen.getByText("Password is required")).toBeInTheDocument();
 
 		await user.type(screen.getByLabelText("Email"), "admin@test.com");
 		await user.type(screen.getByLabelText("Password"), "password123");
@@ -135,12 +161,398 @@ describe("CreateAccountStep", () => {
 		await user.click(screen.getByRole("button", { name: "Continue" }));
 
 		await waitFor(() => {
-			expect(screen.getByRole("button", { name: /Creating account/i })).toBeDisabled();
+			expect(onComplete).toHaveBeenCalledTimes(1);
 		});
+		expect(screen.queryByText("Email is required")).not.toBeInTheDocument();
+		expect(screen.queryByText("Password is required")).not.toBeInTheDocument();
 	});
 
 	it("shows info callout about saving credentials", () => {
-		renderWithProviders(<CreateAccountStep />);
+		renderWithProviders(<CreateAccountStep onComplete={() => {}} />);
 		expect(screen.getByText(/Save these credentials/)).toBeInTheDocument();
+	});
+});
+
+describe("OnboardingPage navigation and flow", () => {
+	it("persists the latest account password after navigating back to Account", async () => {
+		const accountBodies: Array<{ email: string; password: string }> = [];
+		const loginBodies: Array<{ email: string; password: string }> = [];
+
+		server.use(
+			http.post("/api/setup/account", async ({ request }) => {
+				const body = (await request.json()) as { email: string; password: string };
+				accountBodies.push(body);
+				return HttpResponse.json({ success: true });
+			}),
+			http.post("/api/auth/login", async ({ request }) => {
+				const body = (await request.json()) as { email: string; password: string };
+				loginBodies.push(body);
+				return HttpResponse.json({ authenticated: true, email: body.email });
+			}),
+		);
+
+		const user = userEvent.setup();
+		renderWithProviders(<OnboardingPage />);
+
+		await user.type(screen.getByLabelText("Email"), "admin@test.com");
+		await user.type(screen.getByLabelText("Password"), "password123");
+		await user.type(screen.getByLabelText("Confirm password"), "password123");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Set up your bot")).toBeInTheDocument();
+		});
+
+		await user.click(screen.getByRole("button", { name: "Account" }));
+		expect(screen.getByText("Create your admin account")).toBeInTheDocument();
+		expect(screen.getByLabelText("Email")).toHaveValue("admin@test.com");
+
+		await user.type(screen.getByLabelText("Password"), "password456");
+		await user.type(screen.getByLabelText("Confirm password"), "password456");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Set up your bot")).toBeInTheDocument();
+		});
+
+		expect(accountBodies.map((b) => b.password)).toEqual(["password123", "password456"]);
+		expect(loginBodies.map((b) => b.password)).toEqual(["password123", "password456"]);
+	});
+
+	it("autosaves account edits when leaving Account via step navigation", async () => {
+		const accountBodies: Array<{ email: string; password: string }> = [];
+
+		server.use(
+			http.post("/api/setup/account", async ({ request }) => {
+				const body = (await request.json()) as { email: string; password: string };
+				accountBodies.push(body);
+				return HttpResponse.json({ success: true });
+			}),
+		);
+
+		const user = userEvent.setup();
+		renderWithProviders(<OnboardingPage />);
+
+		await user.type(screen.getByLabelText("Email"), "admin@test.com");
+		await user.type(screen.getByLabelText("Password"), "password123");
+		await user.type(screen.getByLabelText("Confirm password"), "password123");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Set up your bot")).toBeInTheDocument();
+		});
+
+		await user.click(screen.getByRole("button", { name: "Account" }));
+		expect(screen.getByText("Create your admin account")).toBeInTheDocument();
+		await user.type(screen.getByLabelText("Password"), "password456");
+		await user.type(screen.getByLabelText("Confirm password"), "password456");
+
+		await user.click(screen.getByRole("button", { name: "Identity" }));
+		await waitFor(() => {
+			expect(screen.getByText("Set up your bot")).toBeInTheDocument();
+		});
+
+		expect(accountBodies.map((b) => b.password)).toEqual(["password123", "password456"]);
+	});
+
+	it("persists the latest identity values after navigating back to Identity", async () => {
+		const identityBodies: Array<{ orgName: string; botName: string }> = [];
+
+		server.use(
+			http.post("/api/setup/identity", async ({ request }) => {
+				const body = (await request.json()) as { orgName: string; botName: string };
+				identityBodies.push(body);
+				return HttpResponse.json({ success: true });
+			}),
+		);
+
+		const user = userEvent.setup();
+		renderWithProviders(<OnboardingPage />);
+
+		await user.type(screen.getByLabelText("Email"), "admin@test.com");
+		await user.type(screen.getByLabelText("Password"), "password123");
+		await user.type(screen.getByLabelText("Confirm password"), "password123");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		await user.type(screen.getByLabelText("Organization Name"), "Acme");
+		await user.clear(screen.getByLabelText("Bot Name"));
+		await user.type(screen.getByLabelText("Bot Name"), "Sketch");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Connect your channels")).toBeInTheDocument();
+		});
+
+		await user.click(screen.getByRole("button", { name: "Identity" }));
+		expect(screen.getByText("Set up your bot")).toBeInTheDocument();
+		await user.clear(screen.getByLabelText("Organization Name"));
+		await user.type(screen.getByLabelText("Organization Name"), "Acme Labs");
+		await user.clear(screen.getByLabelText("Bot Name"));
+		await user.type(screen.getByLabelText("Bot Name"), "Sketch Pro");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Connect your channels")).toBeInTheDocument();
+		});
+
+		expect(identityBodies).toEqual([
+			{ orgName: "Acme", botName: "Sketch" },
+			{ orgName: "Acme Labs", botName: "Sketch Pro" },
+		]);
+	});
+
+	it("autosaves identity edits when leaving Identity via step navigation", async () => {
+		const identityBodies: Array<{ orgName: string; botName: string }> = [];
+
+		server.use(
+			http.post("/api/setup/identity", async ({ request }) => {
+				const body = (await request.json()) as { orgName: string; botName: string };
+				identityBodies.push(body);
+				return HttpResponse.json({ success: true });
+			}),
+			http.post("/api/setup/slack/verify", () => {
+				return HttpResponse.json({ success: true, workspaceName: "Test Workspace" });
+			}),
+		);
+
+		const user = userEvent.setup();
+		renderWithProviders(<OnboardingPage />);
+
+		await user.type(screen.getByLabelText("Email"), "admin@test.com");
+		await user.type(screen.getByLabelText("Password"), "password123");
+		await user.type(screen.getByLabelText("Confirm password"), "password123");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		await user.type(screen.getByLabelText("Organization Name"), "Acme");
+		await user.clear(screen.getByLabelText("Bot Name"));
+		await user.type(screen.getByLabelText("Bot Name"), "Sketch");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Connect your channels")).toBeInTheDocument();
+		});
+
+		await user.click(screen.getByRole("button", { name: "Identity" }));
+		await waitFor(() => {
+			expect(screen.getByText("Set up your bot")).toBeInTheDocument();
+		});
+		await user.clear(screen.getByLabelText("Organization Name"));
+		await user.type(screen.getByLabelText("Organization Name"), "Acme Labs");
+		await user.clear(screen.getByLabelText("Bot Name"));
+		await user.type(screen.getByLabelText("Bot Name"), "Sketch Pro");
+
+		await user.click(screen.getByRole("button", { name: "Channels" }));
+		await waitFor(() => {
+			expect(screen.getByText("Connect your channels")).toBeInTheDocument();
+		});
+
+		expect(identityBodies).toEqual([
+			{ orgName: "Acme", botName: "Sketch" },
+			{ orgName: "Acme Labs", botName: "Sketch Pro" },
+		]);
+	});
+
+	it("uses updated identity values in later onboarding steps", async () => {
+		server.use(
+			http.post("/api/setup/slack/verify", () => {
+				return HttpResponse.json({ success: true, workspaceName: "Test Workspace" });
+			}),
+			http.post("/api/setup/llm/verify", () => {
+				return HttpResponse.json({ success: true });
+			}),
+			http.post("/api/setup/llm", () => {
+				return HttpResponse.json({ success: true });
+			}),
+		);
+
+		const user = userEvent.setup();
+		renderWithProviders(<OnboardingPage />);
+
+		await user.type(screen.getByLabelText("Email"), "admin@test.com");
+		await user.type(screen.getByLabelText("Password"), "password123");
+		await user.type(screen.getByLabelText("Confirm password"), "password123");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		await user.type(screen.getByLabelText("Organization Name"), "Acme");
+		await user.clear(screen.getByLabelText("Bot Name"));
+		await user.type(screen.getByLabelText("Bot Name"), "Sketch");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Connect your channels")).toBeInTheDocument();
+		});
+
+		await user.click(screen.getByRole("button", { name: "Identity" }));
+		await user.clear(screen.getByLabelText("Organization Name"));
+		await user.type(screen.getByLabelText("Organization Name"), "Acme Labs");
+		await user.clear(screen.getByLabelText("Bot Name"));
+		await user.type(screen.getByLabelText("Bot Name"), "Sketch Pro");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		await waitFor(() => {
+			expect(screen.getByText("Connect your channels")).toBeInTheDocument();
+		});
+
+		await user.type(screen.getByLabelText("Bot Token"), "xoxb-test-bot-token");
+		await user.type(screen.getByLabelText("App-Level Token"), "xapp-test-app-token");
+		await user.click(screen.getByRole("button", { name: "Connect" }));
+		await waitFor(() => {
+			expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+		});
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		await user.type(screen.getByLabelText("API Key"), "sk-ant-test-key");
+		await user.click(screen.getByRole("button", { name: "Connect" }));
+		await waitFor(() => {
+			expect(screen.getByRole("button", { name: "Continue" })).toBeInTheDocument();
+		});
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		expect(screen.getByText("Test your setup")).toBeInTheDocument();
+		expect(screen.getByText(/@Sketch Pro/)).toBeInTheDocument();
+	});
+
+	it("allows navigating back to Account step from progress indicator", async () => {
+		server.use(
+			http.post("/api/setup/slack/verify", () => {
+				return HttpResponse.json({ success: true, workspaceName: "Test Workspace" });
+			}),
+		);
+
+		const user = userEvent.setup();
+		renderWithProviders(<OnboardingPage />);
+
+		await user.type(screen.getByLabelText("Email"), "admin@test.com");
+		await user.type(screen.getByLabelText("Password"), "password123");
+		await user.type(screen.getByLabelText("Confirm password"), "password123");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		await user.type(screen.getByLabelText("Organization Name"), "Acme");
+		await user.type(screen.getByLabelText("Bot Name"), "Sketch");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		await user.type(screen.getByLabelText("Bot Token"), "xoxb-test-bot-token");
+		await user.type(screen.getByLabelText("App-Level Token"), "xapp-test-app-token");
+		await user.click(screen.getByRole("button", { name: "Connect" }));
+
+		await waitFor(() => {
+			expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+		});
+
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+		expect(screen.getByText("Connect your LLM")).toBeInTheDocument();
+
+		await user.click(screen.getByRole("button", { name: "Account" }));
+		expect(screen.getByText("Create your admin account")).toBeInTheDocument();
+	});
+
+	it("resumes from backend-provided setup status", () => {
+		renderWithProviders(
+			<OnboardingPage
+				initialSetupStatus={{
+					completed: false,
+					currentStep: 4,
+					adminEmail: "admin@test.com",
+					orgName: "Acme",
+					botName: "Sketch",
+					slackConnected: true,
+					llmConnected: false,
+					llmProvider: null,
+				}}
+			/>,
+		);
+
+		expect(screen.getByText("Connect your LLM")).toBeInTheDocument();
+	});
+
+	it("finalizes setup in expected order and navigates to channels", async () => {
+		const calls: string[] = [];
+		server.use(
+			http.post("/api/setup/account", () => {
+				calls.push("account");
+				return HttpResponse.json({ success: true });
+			}),
+			http.post("/api/setup/identity", () => {
+				calls.push("identity");
+				return HttpResponse.json({ success: true });
+			}),
+			http.post("/api/setup/slack/verify", () => {
+				calls.push("slack-verify");
+				return HttpResponse.json({ success: true, workspaceName: "Test Workspace" });
+			}),
+			http.post("/api/setup/slack", () => {
+				calls.push("slack");
+				return HttpResponse.json({ success: true });
+			}),
+			http.post("/api/setup/llm/verify", () => {
+				calls.push("llm-verify");
+				return HttpResponse.json({ success: true });
+			}),
+			http.post("/api/setup/llm", () => {
+				calls.push("llm");
+				return HttpResponse.json({ success: true });
+			}),
+			http.post("/api/setup/complete", () => {
+				calls.push("complete");
+				return HttpResponse.json({ success: true });
+			}),
+			http.post("/api/auth/login", () => {
+				calls.push("login");
+				return HttpResponse.json({ authenticated: true, email: "admin@test.com" });
+			}),
+			http.get("/api/auth/session", () => {
+				calls.push("session");
+				return HttpResponse.json({ authenticated: true, email: "admin@test.com" });
+			}),
+		);
+
+		const user = userEvent.setup();
+		renderWithProviders(<OnboardingPage />);
+
+		// Step 1
+		await user.type(screen.getByLabelText("Email"), "admin@test.com");
+		await user.type(screen.getByLabelText("Password"), "password123");
+		await user.type(screen.getByLabelText("Confirm password"), "password123");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		// Step 2
+		await user.type(screen.getByLabelText("Organization Name"), "Acme");
+		await user.clear(screen.getByLabelText("Bot Name"));
+		await user.type(screen.getByLabelText("Bot Name"), "Sketch");
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		// Step 3
+		await user.type(screen.getByLabelText("Bot Token"), "xoxb-test-bot-token");
+		await user.type(screen.getByLabelText("App-Level Token"), "xapp-test-app-token");
+		await user.click(screen.getByRole("button", { name: "Connect" }));
+		await waitFor(() => {
+			expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+		});
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		// Step 4
+		await user.type(screen.getByLabelText("API Key"), "sk-ant-test-key");
+		await user.click(screen.getByRole("button", { name: "Connect" }));
+		await waitFor(() => {
+			expect(screen.getByRole("button", { name: "Continue" })).toBeInTheDocument();
+		});
+		await user.click(screen.getByRole("button", { name: "Continue" }));
+
+		// Step 5
+		await user.click(screen.getByRole("button", { name: "Skip" }));
+
+		// Step 6
+		await user.click(screen.getByRole("button", { name: "Skip for now" }));
+
+		// Step 7
+		await user.click(screen.getByRole("button", { name: "Go to Dashboard" }));
+
+		await waitFor(() => {
+			expect(mockNavigate).toHaveBeenCalledWith({ to: "/channels" });
+		});
+
+		expect(calls).toEqual([
+			"account",
+			"login",
+			"identity",
+			"slack-verify",
+			"slack",
+			"llm-verify",
+			"llm",
+			"complete",
+			"session",
+		]);
 	});
 });

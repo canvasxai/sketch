@@ -12,18 +12,6 @@ export const configSchema = z.object({
 	SQLITE_PATH: z.string().default("./data/sketch.db"),
 	DATABASE_URL: z.string().optional(),
 
-	// LLM — direct API, Bedrock, Vertex, or custom base URL
-	ANTHROPIC_API_KEY: z.string().optional(),
-	ANTHROPIC_BASE_URL: z.string().url().optional(),
-	ANTHROPIC_AUTH_TOKEN: z.string().optional(),
-	ANTHROPIC_MODEL: z.string().optional(),
-	CLAUDE_CODE_USE_BEDROCK: z.string().optional(),
-	CLAUDE_CODE_USE_VERTEX: z.string().optional(),
-
-	// Slack
-	SLACK_APP_TOKEN: z.string().startsWith("xapp-").optional(),
-	SLACK_BOT_TOKEN: z.string().startsWith("xoxb-").optional(),
-
 	// Slack context
 	SLACK_CHANNEL_HISTORY_LIMIT: z.coerce.number().default(5),
 	SLACK_THREAD_HISTORY_LIMIT: z.coerce.number().default(50),
@@ -56,26 +44,6 @@ export function loadConfig(): Config {
  * Checks cross-field dependencies after loadConfig() succeeds.
  */
 export function validateConfig(config: Config): void {
-	const hasLlmProvider =
-		config.ANTHROPIC_API_KEY ||
-		config.ANTHROPIC_BASE_URL ||
-		config.CLAUDE_CODE_USE_BEDROCK ||
-		config.CLAUDE_CODE_USE_VERTEX;
-	if (!hasLlmProvider) {
-		console.error("Must set ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, CLAUDE_CODE_USE_BEDROCK, or CLAUDE_CODE_USE_VERTEX");
-		process.exit(1);
-	}
-
-	// Slack tokens are optional, but if one is provided, both must be
-	if (config.SLACK_APP_TOKEN && !config.SLACK_BOT_TOKEN) {
-		console.error("SLACK_APP_TOKEN provided without SLACK_BOT_TOKEN");
-		process.exit(1);
-	}
-	if (config.SLACK_BOT_TOKEN && !config.SLACK_APP_TOKEN) {
-		console.error("SLACK_BOT_TOKEN provided without SLACK_APP_TOKEN");
-		process.exit(1);
-	}
-
 	if (config.DB_TYPE === "postgres" && !config.DATABASE_URL) {
 		console.error("DB_TYPE=postgres requires DATABASE_URL");
 		process.exit(1);

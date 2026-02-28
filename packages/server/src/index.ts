@@ -1,5 +1,6 @@
 import { basename, join } from "node:path";
 import { serve } from "@hono/node-server";
+import { applyLlmEnvFromSettings } from "./agent/llm-env";
 import { formatBufferedContext } from "./agent/prompt";
 import { runAgent } from "./agent/runner";
 import { getSessionId } from "./agent/sessions";
@@ -8,13 +9,16 @@ import { loadConfig, validateConfig } from "./config";
 import { createDatabase } from "./db/index";
 import { runMigrations } from "./db/migrate";
 import { createChannelRepository } from "./db/repositories/channels";
+import { createSettingsRepository } from "./db/repositories/settings";
 import { createUserRepository } from "./db/repositories/users";
 import { type Attachment, downloadSlackFile, downloadWhatsAppMedia, extensionToMime } from "./files";
 import { createApp } from "./http";
 import { createLogger } from "./logger";
 import { QueueManager } from "./queue";
+import { slackApiCall } from "./slack/api";
 import { SlackBot } from "./slack/bot";
 import { createSlackMessageHandler } from "./slack/message-handler";
+import { createSlackStartupManager } from "./slack/startup";
 import type { BufferedMessage } from "./slack/thread-buffer";
 import { ThreadBuffer } from "./slack/thread-buffer";
 import { UserCache } from "./slack/user-cache";
@@ -36,6 +40,15 @@ logger.info("Database ready");
 // 4. Repositories
 const users = createUserRepository(db);
 const channels = createChannelRepository(db);
+const settingsRepo = createSettingsRepository(db);
+
+async function applyLlmEnvFromDb() {
+	const settingsRow = await settingsRepo.get();
+	applyLlmEnvFromSettings(settingsRow, logger);
+}
+
+// Apply LLM configuration from DB (if present) so agent runs use DB-stored settings.
+await applyLlmEnvFromDb();
 
 // 5. Queue manager
 const queueManager = new QueueManager();
@@ -44,17 +57,20 @@ const queueManager = new QueueManager();
 const threadBuffer = new ThreadBuffer();
 const userCache = new UserCache();
 
-// 7. Slack bot — start only if tokens configured
+// 7. Slack bot runtime — start only if tokens configured, can be hot-started from setup API
 let slack: SlackBot | null = null;
-const hasSlack = config.SLACK_APP_TOKEN && config.SLACK_BOT_TOKEN;
 
-if (hasSlack) {
-	slack = new SlackBot({
-		appToken: config.SLACK_APP_TOKEN as string,
-		botToken: config.SLACK_BOT_TOKEN as string,
+async function validateSlackTokens(botToken: string, appToken: string) {
+	void appToken;
+	await slackApiCall(botToken, "auth.test");
+}
+
+function createConfiguredSlackBot(tokens: { botToken: string; appToken: string }) {
+	const slackBot = new SlackBot({
+		appToken: tokens.appToken,
+		botToken: tokens.botToken,
 		logger,
 	});
-	const slackBot = slack;
 
 	// DM handler
 	slackBot.onMessage(async (message) => {
@@ -75,6 +91,7 @@ if (hasSlack) {
 			logger.info({ slackUserId: message.userId, channelId: message.channelId }, "Processing message");
 
 			const workspaceDir = await ensureWorkspace(config, user.id);
+			const settingsRow = await settingsRepo.get();
 
 			// Download any attached files
 			const attachments: Attachment[] = [];
@@ -95,13 +112,12 @@ if (hasSlack) {
 				const maxBytes = config.MAX_FILE_SIZE_MB * 1024 * 1024;
 				for (const file of message.files) {
 					try {
-						const downloaded = await downloadSlackFile(
-							file.urlPrivate,
-							config.SLACK_BOT_TOKEN as string,
-							attachDir,
-							maxBytes,
-							logger,
-						);
+						const botTokenForFiles = settingsRow?.slack_bot_token;
+						if (!botTokenForFiles) {
+							throw new Error("Slack bot token not configured");
+						}
+
+						const downloaded = await downloadSlackFile(file.urlPrivate, botTokenForFiles, attachDir, maxBytes, logger);
 						attachments.push(downloaded);
 					} catch (err) {
 						logger.warn({ err, fileName: file.name }, "Failed to download file");
@@ -128,6 +144,8 @@ if (hasSlack) {
 					logger,
 					platform: "slack",
 					onMessage,
+					orgName: settingsRow?.org_name,
+					botName: settingsRow?.bot_name,
 					attachments: attachments.length > 0 ? attachments : undefined,
 				});
 
@@ -161,15 +179,15 @@ if (hasSlack) {
 			const workspaceDir = await ensureChannelWorkspace(config, message.channelId);
 			const attachDir = join(workspaceDir, "attachments");
 			const maxBytes = config.MAX_FILE_SIZE_MB * 1024 * 1024;
+			const settingsRow = await settingsRepo.get();
 			for (const file of message.files) {
 				try {
-					const downloaded = await downloadSlackFile(
-						file.urlPrivate,
-						config.SLACK_BOT_TOKEN as string,
-						attachDir,
-						maxBytes,
-						logger,
-					);
+					const botTokenForFiles = settingsRow?.slack_bot_token;
+					if (!botTokenForFiles) {
+						throw new Error("Slack bot token not configured");
+					}
+
+					const downloaded = await downloadSlackFile(file.urlPrivate, botTokenForFiles, attachDir, maxBytes, logger);
 					downloadedAttachments.push(downloaded);
 				} catch (err) {
 					logger.warn({ err, fileName: file.name }, "Failed to download passive thread file");
@@ -220,6 +238,7 @@ if (hasSlack) {
 			}
 
 			const workspaceDir = await ensureChannelWorkspace(config, message.channelId);
+			const settingsRow = await settingsRepo.get();
 
 			threadBuffer.register(message.channelId, threadTs);
 
@@ -242,13 +261,12 @@ if (hasSlack) {
 				const maxBytes = config.MAX_FILE_SIZE_MB * 1024 * 1024;
 				for (const file of message.files) {
 					try {
-						const downloaded = await downloadSlackFile(
-							file.urlPrivate,
-							config.SLACK_BOT_TOKEN as string,
-							attachDir,
-							maxBytes,
-							logger,
-						);
+						const botTokenForFiles = settingsRow?.slack_bot_token;
+						if (!botTokenForFiles) {
+							throw new Error("Slack bot token not configured");
+						}
+
+						const downloaded = await downloadSlackFile(file.urlPrivate, botTokenForFiles, attachDir, maxBytes, logger);
 						attachments.push(downloaded);
 					} catch (err) {
 						logger.warn({ err, fileName: file.name }, "Failed to download file");
@@ -309,6 +327,8 @@ if (hasSlack) {
 					platform: "slack",
 					onMessage,
 					threadTs,
+					orgName: settingsRow?.org_name,
+					botName: settingsRow?.bot_name,
 					attachments: attachments.length > 0 ? attachments : undefined,
 					channelContext: {
 						channelName: channel.name,
@@ -333,7 +353,29 @@ if (hasSlack) {
 			}
 		});
 	});
+
+	return slackBot;
 }
+
+const startSlackBotIfConfigured = createSlackStartupManager({
+	logger,
+	getSettingsTokens: async () => {
+		const settingsRow = await settingsRepo.get();
+		return {
+			botToken: settingsRow?.slack_bot_token,
+			appToken: settingsRow?.slack_app_token,
+		};
+	},
+	validateTokens: validateSlackTokens,
+	getCurrentBot: () => slack,
+	setCurrentBot: (bot) => {
+		slack = bot;
+	},
+	createBot: createConfiguredSlackBot,
+});
+
+// Attempt Slack startup once on boot with any existing tokens
+await startSlackBotIfConfigured().catch(() => {});
 
 // 8. WhatsApp bot — always instantiate, connect only if creds exist in DB
 const whatsapp = new WhatsAppBot({ db, logger });
@@ -354,6 +396,7 @@ whatsapp.onMessage(async (message) => {
 
 	queue.enqueue(async () => {
 		const workspaceDir = await ensureWorkspace(config, user.id);
+		const settingsRow = await settingsRepo.get();
 		const msgKey = message.rawMessage.key;
 		if (!msgKey) return;
 
@@ -389,6 +432,8 @@ whatsapp.onMessage(async (message) => {
 				logger,
 				platform: "whatsapp",
 				onMessage,
+				orgName: settingsRow?.org_name,
+				botName: settingsRow?.bot_name,
 				attachments: attachments.length > 0 ? attachments : undefined,
 			});
 
@@ -420,16 +465,21 @@ whatsapp.onMessage(async (message) => {
 });
 
 // 9. HTTP server — after bot instantiation so pairing endpoint has a reference
-const app = createApp(db, config, { whatsapp, slack: slack ?? undefined });
+const app = createApp(db, config, {
+	whatsapp,
+	getSlack: () => slack,
+	onSlackTokensUpdated: async (tokens) => {
+		if (!tokens) return;
+		await startSlackBotIfConfigured(tokens);
+	},
+	onLlmSettingsUpdated: async () => {
+		await applyLlmEnvFromDb();
+	},
+});
 const server = serve({ fetch: app.fetch, port: config.PORT });
 logger.info({ port: config.PORT }, "HTTP server started");
 
 // 10. Start platforms
-if (slack) {
-	await slack.start();
-	logger.info("Slack bot connected");
-}
-
 const whatsappConnected = await whatsapp.start();
 if (whatsappConnected) {
 	logger.info("WhatsApp connected");
@@ -437,7 +487,7 @@ if (whatsappConnected) {
 	logger.info("WhatsApp not paired — use GET /api/whatsapp/pair to connect");
 }
 
-if (!hasSlack && !whatsappConnected) {
+if (!slack && !whatsappConnected) {
 	logger.info("No channels active — pair WhatsApp via GET /api/whatsapp/pair or configure Slack tokens");
 }
 

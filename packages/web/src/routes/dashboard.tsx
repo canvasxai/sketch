@@ -1,5 +1,4 @@
 import { AppSidebar } from "@/components/app-sidebar";
-import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { api } from "@/lib/api";
 import { Outlet, createRoute, redirect, useRouteContext } from "@tanstack/react-router";
@@ -41,11 +40,8 @@ function DashboardLayout() {
 		<SidebarProvider>
 			<AppSidebar email={auth.email ?? "admin"} />
 			<SidebarInset>
-				<header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-					<SidebarTrigger className="-ml-1" />
-					<Separator orientation="vertical" className="mr-2 h-4" />
-				</header>
-				<main className="flex-1 overflow-auto">
+				<SidebarTrigger className="absolute left-3 top-3 z-20" />
+				<main className="flex-1 overflow-auto pt-10">
 					<Outlet />
 				</main>
 			</SidebarInset>

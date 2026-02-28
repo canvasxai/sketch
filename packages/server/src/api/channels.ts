@@ -4,18 +4,21 @@ import type { WhatsAppBot } from "../whatsapp/bot";
 
 interface ChannelDeps {
 	whatsapp?: WhatsAppBot;
-	slack?: SlackBot;
+	getSlack?: () => SlackBot | null;
 }
 
 export function channelRoutes(deps: ChannelDeps) {
 	const routes = new Hono();
 
 	routes.get("/status", (c) => {
+		const slackBot = deps.getSlack?.() ?? null;
+		const slackConfigured = !!slackBot;
+
 		const channels = [
 			{
 				platform: "slack" as const,
-				configured: !!deps.slack,
-				connected: null,
+				configured: slackConfigured,
+				connected: slackConfigured ? true : null,
 			},
 			{
 				platform: "whatsapp" as const,

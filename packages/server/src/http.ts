@@ -11,6 +11,7 @@ import { authRoutes } from "./api/auth";
 import { channelRoutes } from "./api/channels";
 import { healthRoutes } from "./api/health";
 import { createAuthMiddleware } from "./api/middleware";
+import { settingsRoutes } from "./api/settings";
 import { setupRoutes } from "./api/setup";
 import { whatsappRoutes } from "./api/whatsapp";
 import type { Config } from "./config";
@@ -21,7 +22,9 @@ import type { WhatsAppBot } from "./whatsapp/bot";
 
 interface AppDeps {
 	whatsapp?: WhatsAppBot;
-	slack?: SlackBot;
+	getSlack?: () => SlackBot | null;
+	onSlackTokensUpdated?: (tokens?: { botToken: string; appToken: string }) => Promise<void>;
+	onLlmSettingsUpdated?: () => Promise<void>;
 }
 
 export function createApp(db: Kysely<DB>, _config: Config, deps?: AppDeps) {
@@ -34,8 +37,15 @@ export function createApp(db: Kysely<DB>, _config: Config, deps?: AppDeps) {
 	// API routes
 	app.route("/api/health", healthRoutes(db));
 	app.route("/api/auth", authRoutes(settings));
-	app.route("/api/setup", setupRoutes(settings));
-	app.route("/api/channels", channelRoutes({ whatsapp: deps?.whatsapp, slack: deps?.slack }));
+	app.route(
+		"/api/setup",
+		setupRoutes(settings, {
+			onSlackTokensUpdated: deps?.onSlackTokensUpdated,
+			onLlmSettingsUpdated: deps?.onLlmSettingsUpdated,
+		}),
+	);
+	app.route("/api/settings", settingsRoutes(settings));
+	app.route("/api/channels", channelRoutes({ whatsapp: deps?.whatsapp, getSlack: deps?.getSlack }));
 
 	if (deps?.whatsapp) {
 		app.route("/api/whatsapp", whatsappRoutes(deps.whatsapp));

@@ -29,7 +29,6 @@ export function createTestConfig(overrides: Partial<Config> = {}): Config {
 	return {
 		DB_TYPE: "sqlite",
 		SQLITE_PATH: ":memory:",
-		ANTHROPIC_API_KEY: "test-key",
 		SLACK_CHANNEL_HISTORY_LIMIT: 5,
 		SLACK_THREAD_HISTORY_LIMIT: 50,
 		MAX_FILE_SIZE_MB: 20,

@@ -4,7 +4,7 @@
  * Cookie-based with httpOnly, sameSite=lax, 7-day sliding expiry.
  */
 import { randomBytes } from "node:crypto";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { verifyPassword } from "../auth/password";
 import type { createSettingsRepository } from "../db/repositories/settings";
@@ -19,11 +19,11 @@ interface Session {
 
 const sessions = new Map<string, Session>();
 
-function isSecure(c: { req: { url: string } }): boolean {
+function isSecure(c: Context): boolean {
 	return new URL(c.req.url).protocol === "https:";
 }
 
-function setSessionCookie(c: Parameters<typeof setCookie>[0], token: string, secure: boolean) {
+function setSessionCookie(c: Context, token: string, secure: boolean) {
 	setCookie(c, SESSION_COOKIE, token, {
 		httpOnly: true,
 		secure,
@@ -34,6 +34,13 @@ function setSessionCookie(c: Parameters<typeof setCookie>[0], token: string, sec
 }
 
 type SettingsRepo = ReturnType<typeof createSettingsRepository>;
+
+export function createSession(c: Context, email: string): string {
+	const token = randomBytes(32).toString("hex");
+	sessions.set(token, { email, expiresAt: Date.now() + SESSION_TTL_MS });
+	setSessionCookie(c, token, isSecure(c));
+	return token;
+}
 
 export function authRoutes(settings: SettingsRepo) {
 	const routes = new Hono();
@@ -56,10 +63,7 @@ export function authRoutes(settings: SettingsRepo) {
 			return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid credentials" } }, 401);
 		}
 
-		const token = randomBytes(32).toString("hex");
-		sessions.set(token, { email: row.admin_email, expiresAt: Date.now() + SESSION_TTL_MS });
-
-		setSessionCookie(c, token, isSecure(c));
+		createSession(c, row.admin_email);
 		return c.json({ authenticated: true, email: row.admin_email });
 	});
 

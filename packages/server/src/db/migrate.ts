@@ -8,6 +8,7 @@ import * as m001 from "./migrations/001-initial";
 import * as m002 from "./migrations/002-channels";
 import * as m003 from "./migrations/003-whatsapp-auth";
 import * as m004 from "./migrations/004-settings";
+import * as m005 from "./migrations/005-settings-slack-llm";
 import type { DB } from "./schema";
 
 export async function runMigrations(db: Kysely<DB>): Promise<void> {
@@ -20,6 +21,7 @@ export async function runMigrations(db: Kysely<DB>): Promise<void> {
 					"002-channels": m002,
 					"003-whatsapp-auth": m003,
 					"004-settings": m004,
+					"005-settings-slack-llm": m005,
 				};
 			},
 		},

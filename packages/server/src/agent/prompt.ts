@@ -3,7 +3,7 @@ import type { BufferedMessage } from "../slack/thread-buffer";
 
 /**
  * Build the system context appended to the Claude Code preset.
- * Contains platform formatting rules, user metadata, and optional channel context.
+ * Contains platform formatting rules, user metadata, and optional channel/bot context.
  * No post-processing — the agent produces platform-native formatting.
  *
  * For channel mentions, channelContext injects the channel name, recent messages,
@@ -13,6 +13,8 @@ export function buildSystemContext(params: {
 	platform: "slack" | "whatsapp";
 	userName: string;
 	workspaceDir: string;
+	orgName?: string | null;
+	botName?: string | null;
 	channelContext?: {
 		channelName: string;
 		recentMessages: Array<{ userName: string; text: string }>;
@@ -57,6 +59,23 @@ export function buildSystemContext(params: {
 		if (params.channelContext.recentMessages.length > 0) {
 			const formatted = params.channelContext.recentMessages.map((m) => `[${m.userName}]: ${m.text}`).join("\n");
 			sections.push("## Recent Channel Messages", formatted);
+		}
+	}
+
+	if (params.orgName || params.botName) {
+		const botName = params.botName || "Sketch";
+		if (params.orgName) {
+			sections.push(
+				"## Bot Identity",
+				`You are ${botName} from ${params.orgName}.`,
+				"Use this identity when introducing yourself or signing messages.",
+			);
+		} else {
+			sections.push(
+				"## Bot Identity",
+				`You are ${botName}.`,
+				"Use this identity when introducing yourself or signing messages.",
+			);
 		}
 	}
 

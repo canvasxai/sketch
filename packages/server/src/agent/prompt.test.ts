@@ -7,6 +7,8 @@ describe("buildSystemContext", () => {
 			platform: "slack",
 			userName: "Alice",
 			workspaceDir: "/data/workspaces/u123",
+			orgName: "Acme Corp",
+			botName: "Sketch",
 		});
 
 		it("includes mrkdwn formatting rules", () => {
@@ -33,6 +35,11 @@ describe("buildSystemContext", () => {
 		it("includes user name under User heading", () => {
 			expect(result).toContain("## User");
 			expect(result).toContain("Alice");
+		});
+
+		it("includes bot identity section when org/bot provided", () => {
+			expect(result).toContain("## Bot Identity");
+			expect(result).toContain("You are Sketch from Acme Corp.");
 		});
 
 		it("does not include channel context sections", () => {
