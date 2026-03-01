@@ -101,6 +101,70 @@ export const handlers = [
 		});
 	}),
 
+	http.get("/api/users", () => {
+		return HttpResponse.json({
+			users: [
+				{
+					id: "u1",
+					name: "Alice Smith",
+					email: null,
+					slack_user_id: "U001",
+					whatsapp_number: null,
+					created_at: "2026-01-01T00:00:00Z",
+				},
+				{
+					id: "u2",
+					name: "Bob Jones",
+					email: null,
+					slack_user_id: null,
+					whatsapp_number: "+919876543210",
+					created_at: "2026-01-02T00:00:00Z",
+				},
+			],
+		});
+	}),
+
+	http.post("/api/users", async ({ request }) => {
+		const body = (await request.json()) as { name?: string; whatsappNumber?: string };
+		if (!body.name || !body.whatsappNumber) {
+			return HttpResponse.json(
+				{ error: { code: "VALIDATION_ERROR", message: "Name and WhatsApp number required" } },
+				{ status: 400 },
+			);
+		}
+		return HttpResponse.json(
+			{
+				user: {
+					id: "u-new",
+					name: body.name,
+					email: null,
+					slack_user_id: null,
+					whatsapp_number: body.whatsappNumber,
+					created_at: new Date().toISOString(),
+				},
+			},
+			{ status: 201 },
+		);
+	}),
+
+	http.patch("/api/users/:id", async ({ request }) => {
+		const body = (await request.json()) as { name?: string; whatsappNumber?: string | null };
+		return HttpResponse.json({
+			user: {
+				id: "u1",
+				name: body.name ?? "Alice Smith",
+				email: null,
+				slack_user_id: "U001",
+				whatsapp_number: body.whatsappNumber ?? null,
+				created_at: "2026-01-01T00:00:00Z",
+			},
+		});
+	}),
+
+	http.delete("/api/users/:id", () => {
+		return HttpResponse.json({ success: true });
+	}),
+
 	http.get("/api/auth/session", () => {
 		return HttpResponse.json({ authenticated: false });
 	}),

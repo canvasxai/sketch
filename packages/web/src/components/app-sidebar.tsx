@@ -47,7 +47,7 @@ interface NavItem {
 
 const primaryNav: NavItem[] = [
 	{ label: "Channels", icon: <ChatCircleIcon size={18} />, href: "/channels" },
-	{ label: "Team", icon: <UsersThreeIcon size={18} />, href: "/team", disabled: true },
+	{ label: "Team", icon: <UsersThreeIcon size={18} />, href: "/team" },
 	{ label: "Skills", icon: <BrainIcon size={18} />, href: "/skills", disabled: true },
 ];
 

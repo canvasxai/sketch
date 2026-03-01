@@ -3,8 +3,17 @@
  * All methods throw on non-2xx responses with the standard error shape.
  */
 
-interface ApiError {
+export interface ApiError {
 	error: { code: string; message: string };
+}
+
+export interface User {
+	id: string;
+	name: string;
+	email: string | null;
+	slack_user_id: string | null;
+	whatsapp_number: string | null;
+	created_at: string;
 }
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
@@ -133,6 +142,28 @@ export const api = {
 	settings: {
 		identity() {
 			return request<{ orgName: string | null; botName: string }>("/api/settings/identity");
+		},
+	},
+	users: {
+		list() {
+			return request<{ users: User[] }>("/api/users");
+		},
+		create(data: { name: string; whatsappNumber: string }) {
+			return request<{ user: User }>("/api/users", {
+				method: "POST",
+				body: JSON.stringify(data),
+			});
+		},
+		update(id: string, data: { name?: string; whatsappNumber?: string | null }) {
+			return request<{ user: User }>(`/api/users/${id}`, {
+				method: "PATCH",
+				body: JSON.stringify(data),
+			});
+		},
+		remove(id: string) {
+			return request<{ success: boolean }>(`/api/users/${id}`, {
+				method: "DELETE",
+			});
 		},
 	},
 };

@@ -13,9 +13,11 @@ import { healthRoutes } from "./api/health";
 import { createAuthMiddleware } from "./api/middleware";
 import { settingsRoutes } from "./api/settings";
 import { setupRoutes } from "./api/setup";
+import { userRoutes } from "./api/users";
 import { whatsappRoutes } from "./api/whatsapp";
 import type { Config } from "./config";
 import { createSettingsRepository } from "./db/repositories/settings";
+import { createUserRepository } from "./db/repositories/users";
 import type { DB } from "./db/schema";
 import type { SlackBot } from "./slack/bot";
 import type { WhatsAppBot } from "./whatsapp/bot";
@@ -31,6 +33,7 @@ interface AppDeps {
 export function createApp(db: Kysely<DB>, _config: Config, deps?: AppDeps) {
 	const app = new Hono();
 	const settings = createSettingsRepository(db);
+	const users = createUserRepository(db);
 
 	// Auth middleware on all /api/* routes (with setup mode + auth checks)
 	app.use("/api/*", createAuthMiddleware(settings));
@@ -46,6 +49,7 @@ export function createApp(db: Kysely<DB>, _config: Config, deps?: AppDeps) {
 		}),
 	);
 	app.route("/api/settings", settingsRoutes(settings));
+	app.route("/api/users", userRoutes(users));
 	app.route(
 		"/api/channels",
 		channelRoutes({ whatsapp: deps?.whatsapp, getSlack: deps?.getSlack, onSlackDisconnect: deps?.onSlackDisconnect }),

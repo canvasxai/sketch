@@ -4,6 +4,10 @@ import type { DB } from "../schema.js";
 
 export function createUserRepository(db: Kysely<DB>) {
 	return {
+		async list() {
+			return db.selectFrom("users").selectAll().orderBy("created_at", "desc").execute();
+		},
+
 		async findBySlackId(slackUserId: string) {
 			return db.selectFrom("users").selectAll().where("slack_user_id", "=", slackUserId).executeTakeFirst();
 		},
@@ -29,6 +33,22 @@ export function createUserRepository(db: Kysely<DB>) {
 				.execute();
 
 			return db.selectFrom("users").selectAll().where("id", "=", id).executeTakeFirstOrThrow();
+		},
+
+		async update(id: string, data: { name?: string; whatsappNumber?: string | null }) {
+			const values: Record<string, unknown> = {};
+			if (data.name !== undefined) values.name = data.name;
+			if (data.whatsappNumber !== undefined) values.whatsapp_number = data.whatsappNumber;
+
+			if (Object.keys(values).length > 0) {
+				await db.updateTable("users").set(values).where("id", "=", id).execute();
+			}
+
+			return db.selectFrom("users").selectAll().where("id", "=", id).executeTakeFirstOrThrow();
+		},
+
+		async remove(id: string) {
+			return db.deleteFrom("users").where("id", "=", id).execute();
 		},
 	};
 }

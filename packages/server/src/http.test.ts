@@ -1352,3 +1352,253 @@ describe("Settings endpoints", () => {
 		});
 	});
 });
+
+describe("Users API", () => {
+	let db: Kysely<DB>;
+
+	beforeEach(async () => {
+		db = await createTestDb();
+	});
+
+	afterEach(async () => {
+		try {
+			await db.destroy();
+		} catch {}
+	});
+
+	async function setupAdmin(app: ReturnType<typeof createApp>) {
+		await seedAdmin(db);
+		const settings = createSettingsRepository(db);
+		await settings.update({ onboardingCompletedAt: new Date().toISOString() });
+		const loginRes = await app.request("/api/auth/login", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ email: "admin@test.com", password: "testpassword123" }),
+		});
+		return loginRes.headers.get("set-cookie") ?? "";
+	}
+
+	describe("GET /api/users", () => {
+		it("returns list of users", async () => {
+			const app = createApp(db, config);
+			const cookie = await setupAdmin(app);
+
+			const { createUserRepository } = await import("./db/repositories/users");
+			const users = createUserRepository(db);
+			await users.create({ name: "Alice", slackUserId: "U001" });
+			await users.create({ name: "Bob", whatsappNumber: "+919876543210" });
+
+			const res = await app.request("/api/users", { headers: { Cookie: cookie } });
+			expect(res.status).toBe(200);
+
+			const body = await res.json();
+			expect(body.users).toHaveLength(2);
+			const names = body.users.map((u: { name: string }) => u.name);
+			expect(names).toContain("Alice");
+			expect(names).toContain("Bob");
+		});
+
+		it("returns empty array when no users", async () => {
+			const app = createApp(db, config);
+			const cookie = await setupAdmin(app);
+
+			const res = await app.request("/api/users", { headers: { Cookie: cookie } });
+			expect(res.status).toBe(200);
+
+			const body = await res.json();
+			expect(body.users).toEqual([]);
+		});
+	});
+
+	describe("POST /api/users", () => {
+		it("creates user with name and whatsappNumber", async () => {
+			const app = createApp(db, config);
+			const cookie = await setupAdmin(app);
+
+			const res = await app.request("/api/users", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ name: "Charlie", whatsappNumber: "+14155551234" }),
+			});
+			expect(res.status).toBe(201);
+
+			const body = await res.json();
+			expect(body.user.name).toBe("Charlie");
+			expect(body.user.whatsapp_number).toBe("+14155551234");
+			expect(body.user.id).toBeDefined();
+		});
+
+		it("rejects missing name", async () => {
+			const app = createApp(db, config);
+			const cookie = await setupAdmin(app);
+
+			const res = await app.request("/api/users", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ whatsappNumber: "+14155551234" }),
+			});
+			expect(res.status).toBe(400);
+
+			const body = await res.json();
+			expect(body.error.code).toBe("VALIDATION_ERROR");
+		});
+
+		it("rejects invalid phone format", async () => {
+			const app = createApp(db, config);
+			const cookie = await setupAdmin(app);
+
+			const res = await app.request("/api/users", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ name: "Dave", whatsappNumber: "12345" }),
+			});
+			expect(res.status).toBe(400);
+
+			const body = await res.json();
+			expect(body.error.code).toBe("VALIDATION_ERROR");
+		});
+
+		it("returns 409 on duplicate whatsapp_number", async () => {
+			const app = createApp(db, config);
+			const cookie = await setupAdmin(app);
+
+			await app.request("/api/users", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ name: "Eve", whatsappNumber: "+14155559999" }),
+			});
+
+			const res = await app.request("/api/users", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ name: "Frank", whatsappNumber: "+14155559999" }),
+			});
+			expect(res.status).toBe(409);
+
+			const body = await res.json();
+			expect(body.error.code).toBe("CONFLICT");
+		});
+	});
+
+	describe("PATCH /api/users/:id", () => {
+		it("updates name", async () => {
+			const app = createApp(db, config);
+			const cookie = await setupAdmin(app);
+
+			const createRes = await app.request("/api/users", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ name: "Grace", whatsappNumber: "+14155550001" }),
+			});
+			const { user: created } = await createRes.json();
+
+			const res = await app.request(`/api/users/${created.id}`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ name: "Gracie" }),
+			});
+			expect(res.status).toBe(200);
+
+			const body = await res.json();
+			expect(body.user.name).toBe("Gracie");
+			expect(body.user.whatsapp_number).toBe("+14155550001");
+		});
+
+		it("updates whatsappNumber", async () => {
+			const app = createApp(db, config);
+			const cookie = await setupAdmin(app);
+
+			const createRes = await app.request("/api/users", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ name: "Hank", whatsappNumber: "+14155550002" }),
+			});
+			const { user: created } = await createRes.json();
+
+			const res = await app.request(`/api/users/${created.id}`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ whatsappNumber: "+14155550003" }),
+			});
+			expect(res.status).toBe(200);
+
+			const body = await res.json();
+			expect(body.user.whatsapp_number).toBe("+14155550003");
+		});
+
+		it("returns 404 for unknown id", async () => {
+			const app = createApp(db, config);
+			const cookie = await setupAdmin(app);
+
+			const res = await app.request("/api/users/nonexistent-id", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ name: "Ghost" }),
+			});
+			expect(res.status).toBe(404);
+		});
+
+		it("returns 409 on duplicate whatsappNumber", async () => {
+			const app = createApp(db, config);
+			const cookie = await setupAdmin(app);
+
+			await app.request("/api/users", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ name: "Ivy", whatsappNumber: "+14155550010" }),
+			});
+
+			const createRes = await app.request("/api/users", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ name: "Jack", whatsappNumber: "+14155550011" }),
+			});
+			const { user: jack } = await createRes.json();
+
+			const res = await app.request(`/api/users/${jack.id}`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ whatsappNumber: "+14155550010" }),
+			});
+			expect(res.status).toBe(409);
+		});
+	});
+
+	describe("DELETE /api/users/:id", () => {
+		it("removes user", async () => {
+			const app = createApp(db, config);
+			const cookie = await setupAdmin(app);
+
+			const createRes = await app.request("/api/users", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Cookie: cookie },
+				body: JSON.stringify({ name: "Kim", whatsappNumber: "+14155550020" }),
+			});
+			const { user: created } = await createRes.json();
+
+			const res = await app.request(`/api/users/${created.id}`, {
+				method: "DELETE",
+				headers: { Cookie: cookie },
+			});
+			expect(res.status).toBe(200);
+
+			const body = await res.json();
+			expect(body.success).toBe(true);
+
+			const getRes = await app.request("/api/users", { headers: { Cookie: cookie } });
+			const getBody = await getRes.json();
+			expect(getBody.users).toHaveLength(0);
+		});
+
+		it("returns 404 for unknown id", async () => {
+			const app = createApp(db, config);
+			const cookie = await setupAdmin(app);
+
+			const res = await app.request("/api/users/nonexistent-id", {
+				method: "DELETE",
+				headers: { Cookie: cookie },
+			});
+			expect(res.status).toBe(404);
+		});
+	});
+});

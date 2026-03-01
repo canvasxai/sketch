@@ -113,3 +113,71 @@ describe("findById()", () => {
 		expect(found).toBeUndefined();
 	});
 });
+
+describe("list()", () => {
+	it("returns all users", async () => {
+		await users.create({ name: "Alice", slackUserId: "U001" });
+		await users.create({ name: "Bob", whatsappNumber: "+919876543210" });
+		await users.create({ name: "Carol", slackUserId: "U003" });
+
+		const list = await users.list();
+		expect(list).toHaveLength(3);
+		const names = list.map((u) => u.name);
+		expect(names).toContain("Alice");
+		expect(names).toContain("Bob");
+		expect(names).toContain("Carol");
+	});
+
+	it("returns empty array when no users", async () => {
+		const list = await users.list();
+		expect(list).toEqual([]);
+	});
+});
+
+describe("update()", () => {
+	it("updates name", async () => {
+		const created = await users.create({ name: "Dave", slackUserId: "U010" });
+		const updated = await users.update(created.id, { name: "David" });
+		expect(updated.name).toBe("David");
+		expect(updated.slack_user_id).toBe("U010");
+	});
+
+	it("updates whatsapp_number", async () => {
+		const created = await users.create({ name: "Eve", slackUserId: "U011" });
+		const updated = await users.update(created.id, { whatsappNumber: "+14155551234" });
+		expect(updated.whatsapp_number).toBe("+14155551234");
+		expect(updated.name).toBe("Eve");
+	});
+
+	it("clears whatsapp_number when set to null", async () => {
+		const created = await users.create({ name: "Frank", whatsappNumber: "+14155559999" });
+		const updated = await users.update(created.id, { whatsappNumber: null });
+		expect(updated.whatsapp_number).toBeNull();
+	});
+
+	it("throws on duplicate whatsapp_number", async () => {
+		await users.create({ name: "Grace", whatsappNumber: "+14155550001" });
+		const other = await users.create({ name: "Hank", whatsappNumber: "+14155550002" });
+		await expect(users.update(other.id, { whatsappNumber: "+14155550001" })).rejects.toThrow();
+	});
+
+	it("returns unchanged user when no fields provided", async () => {
+		const created = await users.create({ name: "Ivy", slackUserId: "U012" });
+		const updated = await users.update(created.id, {});
+		expect(updated.name).toBe("Ivy");
+		expect(updated.slack_user_id).toBe("U012");
+	});
+});
+
+describe("remove()", () => {
+	it("deletes user", async () => {
+		const created = await users.create({ name: "Jack", slackUserId: "U013" });
+		await users.remove(created.id);
+		const found = await users.findById(created.id);
+		expect(found).toBeUndefined();
+	});
+
+	it("does not throw on non-existent id", async () => {
+		await expect(users.remove("nonexistent-id")).resolves.not.toThrow();
+	});
+});
