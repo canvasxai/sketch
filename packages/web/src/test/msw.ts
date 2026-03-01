@@ -73,8 +73,28 @@ export const handlers = [
 		return HttpResponse.json({ success: true });
 	}),
 
+	http.post("/api/setup/slack/verify", async ({ request }) => {
+		const body = (await request.json()) as { botToken?: string; appToken?: string };
+		if (!body.botToken || !body.appToken) {
+			return HttpResponse.json(
+				{ error: { code: "BAD_REQUEST", message: "Bot token and app token required" } },
+				{ status: 400 },
+			);
+		}
+		return HttpResponse.json({ success: true, workspaceName: "Test Workspace" });
+	}),
+
 	http.post("/api/setup/complete", async () => {
 		return HttpResponse.json({ success: true });
+	}),
+
+	http.get("/api/channels/status", () => {
+		return HttpResponse.json({
+			channels: [
+				{ platform: "slack", configured: false, connected: null, phoneNumber: null },
+				{ platform: "whatsapp", configured: false, connected: null, phoneNumber: null },
+			],
+		});
 	}),
 
 	http.get("/api/auth/session", () => {

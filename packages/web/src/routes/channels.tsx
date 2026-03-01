@@ -20,14 +20,25 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WhatsAppQR } from "@/components/whatsapp-qr";
 import type { ChannelStatus } from "@/lib/api";
 import { api } from "@/lib/api";
-import { CheckIcon, DotsThreeIcon, SlackLogoIcon, WarningIcon, WhatsappLogoIcon } from "@phosphor-icons/react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+	ArrowSquareOutIcon,
+	CheckIcon,
+	CopySimpleIcon,
+	DotsThreeIcon,
+	SlackLogoIcon,
+	SpinnerGapIcon,
+	WarningIcon,
+	WhatsappLogoIcon,
+} from "@phosphor-icons/react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { dashboardRoute } from "./dashboard";
 
@@ -37,12 +48,14 @@ export const channelsRoute = createRoute({
 	component: ChannelsPage,
 });
 
-function ChannelsPage() {
+export function ChannelsPage() {
 	const { data, isLoading } = useQuery({
 		queryKey: ["channels", "status"],
 		queryFn: () => api.channels.status(),
 		refetchInterval: 10000,
 	});
+
+	const allDisconnected = data?.channels?.every((ch) => ch.connected !== true);
 
 	return (
 		<div className="mx-auto max-w-3xl px-6 py-8">
@@ -50,6 +63,14 @@ function ChannelsPage() {
 			<p className="mt-1 text-sm text-muted-foreground">Manage your messaging platform connections</p>
 
 			<div className="mt-6 space-y-4">
+				{!isLoading && allDisconnected && (
+					<div className="flex items-start gap-3 rounded-lg border border-warning/50 bg-warning/5 p-4">
+						<WarningIcon size={16} className="mt-0.5 shrink-0 text-warning" />
+						<p className="text-sm text-warning">
+							No channels connected — connect at least one channel so your team can message the bot.
+						</p>
+					</div>
+				)}
 				{isLoading ? (
 					<>
 						<Skeleton className="h-32 rounded-lg" />
@@ -71,50 +92,68 @@ function PlatformCard({ channel }: { channel: ChannelStatus }) {
 }
 
 function SlackCard({ channel }: { channel: ChannelStatus }) {
+	const queryClient = useQueryClient();
+	const [showConnectDialog, setShowConnectDialog] = useState(false);
+
 	const isConfigured = channel.configured;
 	const isConnected = channel.connected === true;
 
+	const handleConnected = () => {
+		setShowConnectDialog(false);
+		toast.success("Slack connected.");
+		queryClient.invalidateQueries({ queryKey: ["channels", "status"] });
+	};
+
 	return (
-		<div
-			className={`rounded-lg border p-4 ${isConfigured ? "border-border bg-card" : "border-dashed border-border bg-card"}`}
-		>
-			<div className="flex items-center justify-between">
-				<div className="flex items-center gap-3">
-					<div className="flex size-9 items-center justify-center rounded-full bg-muted">
-						<SlackLogoIcon size={20} />
+		<>
+			<div
+				className={`rounded-lg border p-4 ${isConfigured ? "border-border bg-card" : "border-dashed border-border bg-card"}`}
+			>
+				<div className="flex items-center justify-between">
+					<div className="flex items-center gap-3">
+						<div className="flex size-9 items-center justify-center rounded-full bg-muted">
+							<SlackLogoIcon size={20} />
+						</div>
+						<span className="text-sm font-medium">Slack</span>
 					</div>
-					<span className="text-sm font-medium">Slack</span>
-				</div>
-				{isConfigured && (
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button variant="ghost" size="icon" className="size-7">
-								<DotsThreeIcon size={16} />
+					<div className="flex items-center gap-2">
+						{!isConfigured && (
+							<Button variant="outline" size="sm" onClick={() => setShowConnectDialog(true)}>
+								Connect
 							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="end">
-							<DropdownMenuItem disabled>Disconnect</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
-				)}
+						)}
+						{isConfigured && (
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button variant="ghost" size="icon" className="size-7">
+										<DotsThreeIcon size={16} />
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="end">
+									<DropdownMenuItem disabled>Disconnect</DropdownMenuItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
+						)}
+					</div>
+				</div>
+
+				<div className="ml-12 mt-2">
+					{isConnected ? (
+						<div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+							<CheckIcon size={14} className="text-success" />
+							<span>Connected</span>
+						</div>
+					) : (
+						<>
+							<p className="text-sm text-muted-foreground">Not connected</p>
+							<p className="mt-1 text-xs text-muted-foreground">Connect a Slack workspace to get started</p>
+						</>
+					)}
+				</div>
 			</div>
 
-			<div className="ml-12 mt-2">
-				{isConfigured ? (
-					<div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-						<CheckIcon size={14} className="text-success" />
-						<span>{isConnected ? "Connected" : "Configured"}</span>
-					</div>
-				) : (
-					<>
-						<p className="text-sm text-muted-foreground">Not connected</p>
-						<p className="mt-1 text-xs text-muted-foreground">
-							Add Slack tokens to <code className="font-mono">.env</code> to connect
-						</p>
-					</>
-				)}
-			</div>
-		</div>
+			<SlackConnectDialog open={showConnectDialog} onOpenChange={setShowConnectDialog} onConnected={handleConnected} />
+		</>
 	);
 }
 
@@ -257,6 +296,183 @@ function WhatsAppPairDialog({
 					<DialogDescription>Scan this QR code with WhatsApp to connect your number.</DialogDescription>
 				</DialogHeader>
 				{open && <WhatsAppQR onConnected={onConnected} onCancel={() => onOpenChange(false)} />}
+			</DialogContent>
+		</Dialog>
+	);
+}
+
+function SlackConnectDialog({
+	open,
+	onOpenChange,
+	onConnected,
+}: {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	onConnected: () => void;
+}) {
+	const [botToken, setBotToken] = useState("");
+	const [appToken, setAppToken] = useState("");
+	const [manifestCopied, setManifestCopied] = useState(false);
+
+	const connectMutation = useMutation({
+		mutationFn: async () => {
+			await api.setup.verifySlack(botToken.trim(), appToken.trim());
+			await api.setup.slack(botToken.trim(), appToken.trim());
+		},
+		onSuccess: () => {
+			setBotToken("");
+			setAppToken("");
+			onConnected();
+		},
+		onError: (error: Error) => {
+			toast.error(error.message);
+		},
+	});
+
+	const handleCopyManifest = useCallback(async () => {
+		const manifest = JSON.stringify(
+			{
+				display_information: { name: "Sketch" },
+				features: {
+					bot_user: { display_name: "Sketch", always_online: true },
+				},
+				oauth_config: {
+					scopes: {
+						bot: [
+							"app_mentions:read",
+							"channels:history",
+							"channels:read",
+							"chat:write",
+							"groups:history",
+							"groups:read",
+							"im:history",
+							"im:read",
+							"im:write",
+							"mpim:history",
+							"mpim:read",
+							"reactions:read",
+							"reactions:write",
+							"team:read",
+							"users:read",
+							"files:read",
+							"files:write",
+						],
+					},
+				},
+				settings: {
+					event_subscriptions: {
+						bot_events: ["app_mention", "message.channels", "message.groups", "message.im", "message.mpim"],
+					},
+					interactivity: { is_enabled: true },
+					org_deploy_enabled: false,
+					socket_mode_enabled: true,
+					token_rotation_enabled: false,
+				},
+			},
+			null,
+			2,
+		);
+
+		try {
+			await navigator.clipboard.writeText(manifest);
+			setManifestCopied(true);
+			toast.success("Slack manifest copied to clipboard.");
+			setTimeout(() => setManifestCopied(false), 2000);
+		} catch {
+			toast.error("Unable to copy manifest. Please try again.");
+		}
+	}, []);
+
+	const handleOpenChange = (next: boolean) => {
+		if (!next) {
+			setBotToken("");
+			setAppToken("");
+		}
+		onOpenChange(next);
+	};
+
+	return (
+		<Dialog open={open} onOpenChange={handleOpenChange}>
+			<DialogContent className="max-w-md">
+				<DialogHeader>
+					<DialogTitle>Connect Slack</DialogTitle>
+					<DialogDescription>Create a Slack app and paste the tokens to connect.</DialogDescription>
+				</DialogHeader>
+
+				<ol className="list-inside list-decimal space-y-1.5 text-xs text-muted-foreground">
+					<li>Copy the manifest below</li>
+					<li>Go to api.slack.com/apps &rarr; &ldquo;Create New App&rdquo; &rarr; &ldquo;From a Manifest&rdquo;</li>
+					<li>Select your workspace and paste the manifest</li>
+					<li>Click &ldquo;Install to Workspace&rdquo;</li>
+					<li>Copy the Bot Token (OAuth &amp; Permissions page) and App-Level Token</li>
+					<li>Paste both tokens below</li>
+				</ol>
+
+				<div className="flex items-center gap-2">
+					<Button variant="outline" size="sm" onClick={handleCopyManifest}>
+						{manifestCopied ? (
+							<>
+								<CheckIcon className="size-3.5 text-success" weight="bold" />
+								Copied
+							</>
+						) : (
+							<>
+								<CopySimpleIcon className="size-3.5" />
+								Copy Manifest
+							</>
+						)}
+					</Button>
+					<Button variant="ghost" size="sm" asChild>
+						<a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer">
+							Open Slack API
+							<ArrowSquareOutIcon className="size-3.5" />
+						</a>
+					</Button>
+				</div>
+
+				<div className="space-y-3">
+					<div className="space-y-1.5">
+						<Label htmlFor="slack-bot-token" className="text-xs">
+							Bot Token
+						</Label>
+						<Input
+							id="slack-bot-token"
+							value={botToken}
+							onChange={(e) => setBotToken(e.target.value)}
+							placeholder="xoxb-..."
+							disabled={connectMutation.isPending}
+							className="font-mono text-xs"
+						/>
+					</div>
+					<div className="space-y-1.5">
+						<Label htmlFor="slack-app-token" className="text-xs">
+							App-Level Token
+						</Label>
+						<Input
+							id="slack-app-token"
+							value={appToken}
+							onChange={(e) => setAppToken(e.target.value)}
+							placeholder="xapp-..."
+							disabled={connectMutation.isPending}
+							className="font-mono text-xs"
+						/>
+					</div>
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={() => connectMutation.mutate()}
+						disabled={!botToken.trim() || !appToken.trim() || connectMutation.isPending}
+					>
+						{connectMutation.isPending ? (
+							<>
+								<SpinnerGapIcon className="size-3.5 animate-spin" />
+								Connecting...
+							</>
+						) : (
+							"Connect"
+						)}
+					</Button>
+				</div>
 			</DialogContent>
 		</Dialog>
 	);

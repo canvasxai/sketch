@@ -229,6 +229,10 @@ export class WhatsAppBot {
 		}
 	}
 
+	get isConfigured(): boolean {
+		return this.sock !== null;
+	}
+
 	get isConnected(): boolean {
 		return this.sock?.user !== undefined;
 	}

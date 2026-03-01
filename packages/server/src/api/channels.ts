@@ -23,8 +23,8 @@ export function channelRoutes(deps: ChannelDeps) {
 			},
 			{
 				platform: "whatsapp" as const,
-				configured: !!deps.whatsapp,
-				connected: deps.whatsapp ? deps.whatsapp.isConnected : null,
+				configured: deps.whatsapp?.isConfigured ?? false,
+				connected: deps.whatsapp?.isConfigured ? deps.whatsapp.isConnected : null,
 				phoneNumber: deps.whatsapp?.phoneNumber ?? null,
 			},
 		];

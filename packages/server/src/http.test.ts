@@ -90,6 +90,7 @@ describe("WhatsApp endpoints", () => {
 
 	function makeMockWhatsApp(overrides: Partial<WhatsAppBot> = {}): WhatsAppBot {
 		return {
+			isConfigured: false,
 			isConnected: false,
 			phoneNumber: null,
 			startPairing: async () => {},
@@ -233,11 +234,11 @@ describe("WhatsApp endpoints", () => {
 	});
 
 	describe("DELETE /api/whatsapp", () => {
-		it("returns 400 when not connected", async () => {
+		it("returns 400 when not configured", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
 			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
-			const whatsapp = makeMockWhatsApp({ isConnected: false } as Partial<WhatsAppBot>);
+			const whatsapp = makeMockWhatsApp({ isConfigured: false } as Partial<WhatsAppBot>);
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
 
@@ -245,15 +246,16 @@ describe("WhatsApp endpoints", () => {
 			expect(res.status).toBe(400);
 
 			const body = await res.json();
-			expect(body.error.code).toBe("NOT_CONNECTED");
+			expect(body.error.code).toBe("NOT_CONFIGURED");
 		});
 
-		it("disconnects successfully when connected", async () => {
+		it("disconnects successfully when configured", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
 			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
 			const disconnectFn = vi.fn();
 			const whatsapp = makeMockWhatsApp({
+				isConfigured: true,
 				isConnected: true,
 				disconnect: disconnectFn,
 			} as unknown as Partial<WhatsAppBot>);
