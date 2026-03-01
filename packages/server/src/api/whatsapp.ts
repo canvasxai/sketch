@@ -62,8 +62,8 @@ export function whatsappRoutes(whatsapp: WhatsAppBot) {
 	});
 
 	routes.delete("/", async (c) => {
-		if (!whatsapp.isConfigured) {
-			return c.json({ error: { code: "NOT_CONFIGURED", message: "WhatsApp is not configured" } }, 400);
+		if (!whatsapp.isConnected) {
+			return c.json({ error: { code: "NOT_CONNECTED", message: "WhatsApp is not connected" } }, 400);
 		}
 		await whatsapp.disconnect();
 		return c.json({ success: true });

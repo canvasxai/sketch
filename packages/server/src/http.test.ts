@@ -234,11 +234,11 @@ describe("WhatsApp endpoints", () => {
 	});
 
 	describe("DELETE /api/whatsapp", () => {
-		it("returns 400 when not configured", async () => {
+		it("returns 400 when not connected", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
 			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
-			const whatsapp = makeMockWhatsApp({ isConfigured: false } as Partial<WhatsAppBot>);
+			const whatsapp = makeMockWhatsApp({ isConnected: false } as Partial<WhatsAppBot>);
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
 
@@ -246,16 +246,15 @@ describe("WhatsApp endpoints", () => {
 			expect(res.status).toBe(400);
 
 			const body = await res.json();
-			expect(body.error.code).toBe("NOT_CONFIGURED");
+			expect(body.error.code).toBe("NOT_CONNECTED");
 		});
 
-		it("disconnects successfully when configured", async () => {
+		it("disconnects successfully when connected", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
 			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
 			const disconnectFn = vi.fn();
 			const whatsapp = makeMockWhatsApp({
-				isConfigured: true,
 				isConnected: true,
 				disconnect: disconnectFn,
 			} as unknown as Partial<WhatsAppBot>);
@@ -403,6 +402,89 @@ describe("Slack disconnect endpoint", () => {
 		const body = await res.json();
 		expect(body.success).toBe(true);
 		expect(disconnectFn).toHaveBeenCalled();
+	});
+});
+
+describe("GET /api/channels/status — WhatsApp states", () => {
+	let db: Kysely<DB>;
+
+	beforeEach(async () => {
+		db = await createTestDb();
+		clearSessions();
+	});
+
+	afterEach(async () => {
+		try {
+			await db.destroy();
+		} catch {}
+	});
+
+	async function loginAdmin(app: ReturnType<typeof createApp>) {
+		const res = await app.request("/api/auth/login", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ email: "admin@test.com", password: "testpassword123" }),
+		});
+		return res.headers.get("set-cookie") ?? "";
+	}
+
+	it("returns not-connected when WhatsApp is disconnected", async () => {
+		await seedAdmin(db);
+		const settings = createSettingsRepository(db);
+		await settings.update({ onboardingCompletedAt: new Date().toISOString() });
+		const whatsapp = {
+			isConnected: false,
+			phoneNumber: null,
+		} as unknown as WhatsAppBot;
+		const app = createApp(db, config, { whatsapp });
+		const cookie = await loginAdmin(app);
+
+		const res = await app.request("/api/channels/status", { headers: { Cookie: cookie } });
+		expect(res.status).toBe(200);
+
+		const body = await res.json();
+		const wa = body.channels.find((ch: { platform: string }) => ch.platform === "whatsapp");
+		expect(wa.configured).toBe(false);
+		expect(wa.connected).toBeNull();
+		expect(wa.phoneNumber).toBeNull();
+	});
+
+	it("returns connected with phone number when WhatsApp is connected", async () => {
+		await seedAdmin(db);
+		const settings = createSettingsRepository(db);
+		await settings.update({ onboardingCompletedAt: new Date().toISOString() });
+		const whatsapp = {
+			isConnected: true,
+			phoneNumber: "+919876543210",
+		} as unknown as WhatsAppBot;
+		const app = createApp(db, config, { whatsapp });
+		const cookie = await loginAdmin(app);
+
+		const res = await app.request("/api/channels/status", { headers: { Cookie: cookie } });
+		expect(res.status).toBe(200);
+
+		const body = await res.json();
+		const wa = body.channels.find((ch: { platform: string }) => ch.platform === "whatsapp");
+		expect(wa.configured).toBe(true);
+		expect(wa.connected).toBe(true);
+		expect(wa.phoneNumber).toBe("+919876543210");
+	});
+
+	it("returns not-connected when no WhatsApp dep provided", async () => {
+		await seedAdmin(db);
+		const settings = createSettingsRepository(db);
+		await settings.update({ onboardingCompletedAt: new Date().toISOString() });
+		const app = createApp(db, config);
+		const cookie = await loginAdmin(app);
+
+		const res = await app.request("/api/channels/status", { headers: { Cookie: cookie } });
+		expect(res.status).toBe(200);
+
+		const body = await res.json();
+		const wa = body.channels.find((ch: { platform: string }) => ch.platform === "whatsapp");
+		expect(wa.configured).toBe(false);
+		expect(wa.connected).toBeNull();
+		expect(wa.phoneNumber).toBeNull();
 	});
 });
 

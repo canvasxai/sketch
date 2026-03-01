@@ -71,17 +71,6 @@ describe("ChannelsPage", () => {
 			expect(screen.getByRole("button", { name: "Pair" })).toBeInTheDocument();
 		});
 
-		it("shows disconnected state with warning", async () => {
-			channelsHandler({ configured: false, connected: null }, { configured: true, connected: false });
-			renderWithProviders(<ChannelsPage />);
-
-			await waitFor(() => {
-				expect(screen.getByText("Disconnected")).toBeInTheDocument();
-			});
-
-			expect(screen.getByRole("button", { name: "Reconnect" })).toBeInTheDocument();
-		});
-
 		it("shows connected state with phone number", async () => {
 			channelsHandler(
 				{ configured: false, connected: null },
@@ -101,15 +90,6 @@ describe("ChannelsPage", () => {
 	describe("alert banner", () => {
 		it("shows when both channels are not connected", async () => {
 			channelsHandler({ configured: false, connected: null }, { configured: false, connected: null });
-			renderWithProviders(<ChannelsPage />);
-
-			await waitFor(() => {
-				expect(screen.getByText(/No channels connected/)).toBeInTheDocument();
-			});
-		});
-
-		it("shows when slack not configured and whatsapp disconnected", async () => {
-			channelsHandler({ configured: false, connected: null }, { configured: true, connected: false });
 			renderWithProviders(<ChannelsPage />);
 
 			await waitFor(() => {

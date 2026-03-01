@@ -199,13 +199,7 @@ function WhatsAppCard({ channel }: { channel: ChannelStatus }) {
 	const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
 	const [isDisconnecting, setIsDisconnecting] = useState(false);
 
-	const isConfigured = channel.configured;
 	const isConnected = channel.connected === true;
-	const isDisconnected = isConfigured && !isConnected;
-
-	let borderClass = "border-dashed border-border";
-	if (isConnected) borderClass = "border-border";
-	if (isDisconnected) borderClass = "border-warning/50";
 
 	const handlePairConnected = () => {
 		setShowPairDialog(false);
@@ -229,7 +223,9 @@ function WhatsAppCard({ channel }: { channel: ChannelStatus }) {
 
 	return (
 		<>
-			<div className={`rounded-lg border bg-card p-4 ${borderClass}`}>
+			<div
+				className={`rounded-lg border p-4 ${isConnected ? "border-border bg-card" : "border-dashed border-border bg-card"}`}
+			>
 				<div className="flex items-center justify-between">
 					<div className="flex items-center gap-3">
 						<div className="flex size-9 items-center justify-center rounded-full bg-muted">
@@ -238,17 +234,12 @@ function WhatsAppCard({ channel }: { channel: ChannelStatus }) {
 						<span className="text-sm font-medium">WhatsApp</span>
 					</div>
 					<div className="flex items-center gap-2">
-						{!isConfigured && (
+						{!isConnected && (
 							<Button variant="outline" size="sm" onClick={() => setShowPairDialog(true)}>
 								Pair
 							</Button>
 						)}
-						{isDisconnected && (
-							<Button variant="outline" size="sm" onClick={() => setShowPairDialog(true)}>
-								Reconnect
-							</Button>
-						)}
-						{isConfigured && (
+						{isConnected && (
 							<DropdownMenu>
 								<DropdownMenuTrigger asChild>
 									<Button variant="ghost" size="icon" className="size-7">
@@ -256,7 +247,6 @@ function WhatsAppCard({ channel }: { channel: ChannelStatus }) {
 									</Button>
 								</DropdownMenuTrigger>
 								<DropdownMenuContent align="end">
-									<DropdownMenuItem onClick={() => setShowPairDialog(true)}>Re-pair</DropdownMenuItem>
 									<DropdownMenuItem className="text-destructive" onClick={() => setShowDisconnectDialog(true)}>
 										Disconnect
 									</DropdownMenuItem>
@@ -267,19 +257,12 @@ function WhatsAppCard({ channel }: { channel: ChannelStatus }) {
 				</div>
 
 				<div className="ml-12 mt-2">
-					{isConnected && (
+					{isConnected ? (
 						<div className="flex items-center gap-1.5 text-xs text-muted-foreground">
 							<CheckIcon size={14} className="text-success" />
 							<span>Connected{channel.phoneNumber ? ` — ${channel.phoneNumber}` : ""}</span>
 						</div>
-					)}
-					{isDisconnected && (
-						<div className="flex items-center gap-1.5 text-xs text-warning">
-							<WarningIcon size={14} />
-							<span>Disconnected</span>
-						</div>
-					)}
-					{!isConfigured && (
+					) : (
 						<>
 							<p className="text-sm text-muted-foreground">Not connected</p>
 							<p className="mt-1 text-xs text-muted-foreground">Pair a WhatsApp number to get started</p>
