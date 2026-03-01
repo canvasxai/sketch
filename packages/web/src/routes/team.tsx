@@ -400,7 +400,7 @@ function EditMemberDialog({
 
 	const updateMutation = useMutation({
 		mutationFn: () =>
-			api.users.update(user!.id, {
+			api.users.update(user?.id ?? "", {
 				name: name.trim(),
 				whatsappNumber: phone.trim() || null,
 			}),
@@ -504,9 +504,9 @@ function RemoveMemberDialog({
 	onSuccess: () => void;
 }) {
 	const removeMutation = useMutation({
-		mutationFn: () => api.users.remove(user!.id),
+		mutationFn: () => api.users.remove(user?.id ?? ""),
 		onSuccess: () => {
-			toast.success(`${user!.name} has been removed`);
+			toast.success(`${user?.name} has been removed`);
 			onSuccess();
 		},
 		onError: (err: Error) => {
