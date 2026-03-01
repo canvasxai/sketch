@@ -1,6 +1,14 @@
 import { useCallback, useState } from "react";
 
-import { ArrowSquareOutIcon, CheckIcon, CopySimpleIcon, SlackLogoIcon, SpinnerGapIcon } from "@phosphor-icons/react";
+import {
+	ArrowSquareOutIcon,
+	CheckIcon,
+	CopySimpleIcon,
+	InfoIcon,
+	SlackLogoIcon,
+	SpinnerGapIcon,
+	WhatsappLogoIcon,
+} from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -8,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { WhatsAppQR } from "@/components/whatsapp-qr";
 import { api } from "@/lib/api";
 
 interface ChannelState {
@@ -22,6 +31,8 @@ interface StepConnectChannelsProps {
 	botName: string;
 	initialSlackConnected?: boolean;
 	initialSlackWorkspace?: string;
+	initialWhatsappConnected?: boolean;
+	initialWhatsappPhone?: string;
 	onNext: (data: {
 		slackConnected: boolean;
 		slackWorkspace?: string;
@@ -34,6 +45,8 @@ export function StepConnectChannels({
 	botName,
 	initialSlackConnected,
 	initialSlackWorkspace,
+	initialWhatsappConnected,
+	initialWhatsappPhone,
 	onNext,
 }: StepConnectChannelsProps) {
 	const [channels, setChannels] = useState<ChannelState>({
@@ -43,6 +56,9 @@ export function StepConnectChannels({
 			workspaceName: initialSlackWorkspace ?? (initialSlackConnected ? "Workspace" : undefined),
 		},
 	});
+
+	const [whatsappConnected, setWhatsappConnected] = useState(Boolean(initialWhatsappConnected));
+	const [whatsappPhone, setWhatsappPhone] = useState<string | undefined>(initialWhatsappPhone);
 
 	const [slackBotToken, setSlackBotToken] = useState("");
 	const [slackAppToken, setSlackAppToken] = useState("");
@@ -168,14 +184,30 @@ export function StepConnectChannels({
 			console.error(error);
 		}
 	}, [botName]);
-	const canContinue = channels.slack.connected;
+	const handleWhatsAppConnected = (phoneNumber: string) => {
+		setWhatsappConnected(true);
+		setWhatsappPhone(phoneNumber);
+		toast.success("WhatsApp connected.");
+	};
+
+	const handleWhatsAppDisconnect = async () => {
+		try {
+			await api.whatsapp.disconnect();
+			setWhatsappConnected(false);
+			setWhatsappPhone(undefined);
+		} catch {
+			toast.error("Failed to disconnect WhatsApp.");
+		}
+	};
+
+	const canContinue = channels.slack.connected || whatsappConnected;
 
 	const handleContinue = () => {
 		onNext({
 			slackConnected: channels.slack.connected,
 			slackWorkspace: channels.slack.workspaceName,
-			whatsappConnected: false,
-			whatsappPhone: undefined,
+			whatsappConnected,
+			whatsappPhone,
 		});
 	};
 
@@ -292,6 +324,46 @@ export function StepConnectChannels({
 									)}
 								</Button>
 							</div>
+						</>
+					)}
+				</div>
+
+				{/* WhatsApp Card */}
+				<div className="rounded-lg border bg-card p-5">
+					<div className="mb-4 flex items-center justify-between">
+						<div className="flex items-center gap-2.5">
+							<WhatsappLogoIcon className="size-5" />
+							<span className="text-sm font-medium">WhatsApp</span>
+						</div>
+						{whatsappConnected ? (
+							<Badge variant="secondary" className="gap-1 border-0 bg-success/10 text-success">
+								<CheckIcon weight="bold" className="size-3" />
+								Connected — {whatsappPhone}
+							</Badge>
+						) : (
+							<Badge variant="secondary" className="text-muted-foreground">
+								Not connected
+							</Badge>
+						)}
+					</div>
+
+					{whatsappConnected ? (
+						<button
+							type="button"
+							onClick={handleWhatsAppDisconnect}
+							className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+						>
+							Disconnect
+						</button>
+					) : (
+						<>
+							<div className="mb-4 flex items-start gap-2.5 rounded-md border border-primary/20 bg-primary/5 px-3 py-2.5">
+								<InfoIcon size={14} className="mt-0.5 shrink-0 text-primary" />
+								<p className="text-xs text-muted-foreground">
+									We recommend using a separate phone number for Sketch rather than your personal number.
+								</p>
+							</div>
+							<WhatsAppQR onConnected={handleWhatsAppConnected} />
 						</>
 					)}
 				</div>

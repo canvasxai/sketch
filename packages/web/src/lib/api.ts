@@ -28,6 +28,7 @@ export interface ChannelStatus {
 	platform: "slack" | "whatsapp";
 	configured: boolean;
 	connected: boolean | null;
+	phoneNumber: string | null;
 }
 
 export interface SetupStatus {
@@ -113,6 +114,17 @@ export const api = {
 	channels: {
 		status() {
 			return request<{ channels: ChannelStatus[] }>("/api/channels/status");
+		},
+	},
+	whatsapp: {
+		status() {
+			return request<{ connected: boolean; phoneNumber: string | null }>("/api/whatsapp");
+		},
+		cancelPairing() {
+			return request<{ success: boolean }>("/api/whatsapp/pair", { method: "DELETE" });
+		},
+		disconnect() {
+			return request<{ success: boolean }>("/api/whatsapp", { method: "DELETE" });
 		},
 	},
 	settings: {

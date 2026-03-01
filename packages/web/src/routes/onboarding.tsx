@@ -65,6 +65,9 @@ export function OnboardingPage({ initialSetupStatus }: { initialSetupStatus?: Se
 	const [slackConnected, setSlackConnected] = useState(setupStatus.slackConnected);
 	const [slackWorkspace, setSlackWorkspace] = useState<string | undefined>(undefined);
 
+	const [whatsappConnected, setWhatsappConnected] = useState(false);
+	const [whatsappPhone, setWhatsappPhone] = useState<string | undefined>(undefined);
+
 	const [llmProvider, setLlmProvider] = useState<"anthropic" | "bedrock">(setupStatus.llmProvider ?? "anthropic");
 	const [llmConnected, setLlmConnected] = useState(setupStatus.llmConnected);
 
@@ -78,8 +81,8 @@ export function OnboardingPage({ initialSetupStatus }: { initialSetupStatus?: Se
 		botName,
 		slackConnected,
 		slackWorkspace,
-		whatsappConnected: false,
-		whatsappPhone: undefined,
+		whatsappConnected,
+		whatsappPhone,
 		llmProvider,
 		llmConnected,
 		invitedCount: 0,
@@ -239,9 +242,18 @@ export function OnboardingPage({ initialSetupStatus }: { initialSetupStatus?: Se
 					botName={botName}
 					initialSlackConnected={slackConnected}
 					initialSlackWorkspace={slackWorkspace}
-					onNext={({ slackConnected: slackOk, slackWorkspace: workspace }) => {
+					initialWhatsappConnected={whatsappConnected}
+					initialWhatsappPhone={whatsappPhone}
+					onNext={({
+						slackConnected: slackOk,
+						slackWorkspace: workspace,
+						whatsappConnected: waOk,
+						whatsappPhone: waPhone,
+					}) => {
 						setSlackConnected(slackOk);
 						setSlackWorkspace(workspace);
+						setWhatsappConnected(waOk);
+						setWhatsappPhone(waPhone);
 						goToStep(4);
 					}}
 				/>

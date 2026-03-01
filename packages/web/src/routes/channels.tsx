@@ -1,6 +1,6 @@
 /**
  * Channels page — displays Slack and WhatsApp platform cards with connection status.
- * Slack and WhatsApp both show real connection state when available.
+ * WhatsApp pairing uses SSE-based QR flow via the shared WhatsAppQR component.
  */
 import {
 	AlertDialog,
@@ -21,19 +21,14 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WhatsAppQR } from "@/components/whatsapp-qr";
 import type { ChannelStatus } from "@/lib/api";
 import { api } from "@/lib/api";
-import {
-	CheckIcon,
-	DotsThreeIcon,
-	SlackLogoIcon,
-	WarningIcon,
-	WhatsappLogoIcon,
-	XCircleIcon,
-} from "@phosphor-icons/react";
-import { useQuery } from "@tanstack/react-query";
+import { CheckIcon, DotsThreeIcon, SlackLogoIcon, WarningIcon, WhatsappLogoIcon } from "@phosphor-icons/react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { toast } from "sonner";
 import { dashboardRoute } from "./dashboard";
 
 export const channelsRoute = createRoute({
@@ -124,8 +119,10 @@ function SlackCard({ channel }: { channel: ChannelStatus }) {
 }
 
 function WhatsAppCard({ channel }: { channel: ChannelStatus }) {
+	const queryClient = useQueryClient();
 	const [showPairDialog, setShowPairDialog] = useState(false);
 	const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
+	const [isDisconnecting, setIsDisconnecting] = useState(false);
 
 	const isConfigured = channel.configured;
 	const isConnected = channel.connected === true;
@@ -134,6 +131,26 @@ function WhatsAppCard({ channel }: { channel: ChannelStatus }) {
 	let borderClass = "border-dashed border-border";
 	if (isConnected) borderClass = "border-border";
 	if (isDisconnected) borderClass = "border-warning/50";
+
+	const handlePairConnected = () => {
+		setShowPairDialog(false);
+		toast.success("WhatsApp connected.");
+		queryClient.invalidateQueries({ queryKey: ["channels", "status"] });
+	};
+
+	const handleDisconnect = async () => {
+		setIsDisconnecting(true);
+		try {
+			await api.whatsapp.disconnect();
+			toast.success("WhatsApp disconnected.");
+			queryClient.invalidateQueries({ queryKey: ["channels", "status"] });
+		} catch {
+			toast.error("Failed to disconnect WhatsApp.");
+		} finally {
+			setIsDisconnecting(false);
+			setShowDisconnectDialog(false);
+		}
+	};
 
 	return (
 		<>
@@ -152,7 +169,7 @@ function WhatsAppCard({ channel }: { channel: ChannelStatus }) {
 							</Button>
 						)}
 						{isDisconnected && (
-							<Button variant="outline" size="sm">
+							<Button variant="outline" size="sm" onClick={() => setShowPairDialog(true)}>
 								Reconnect
 							</Button>
 						)}
@@ -178,7 +195,7 @@ function WhatsAppCard({ channel }: { channel: ChannelStatus }) {
 					{isConnected && (
 						<div className="flex items-center gap-1.5 text-xs text-muted-foreground">
 							<CheckIcon size={14} className="text-success" />
-							<span>Connected</span>
+							<span>Connected{channel.phoneNumber ? ` — ${channel.phoneNumber}` : ""}</span>
 						</div>
 					)}
 					{isDisconnected && (
@@ -196,7 +213,7 @@ function WhatsAppCard({ channel }: { channel: ChannelStatus }) {
 				</div>
 			</div>
 
-			<WhatsAppPairDialog open={showPairDialog} onOpenChange={setShowPairDialog} />
+			<WhatsAppPairDialog open={showPairDialog} onOpenChange={setShowPairDialog} onConnected={handlePairConnected} />
 
 			<AlertDialog open={showDisconnectDialog} onOpenChange={setShowDisconnectDialog}>
 				<AlertDialogContent>
@@ -207,9 +224,9 @@ function WhatsAppCard({ channel }: { channel: ChannelStatus }) {
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
-						<AlertDialogAction variant="destructive" onClick={() => setShowDisconnectDialog(false)}>
-							Disconnect
+						<AlertDialogCancel disabled={isDisconnecting}>Cancel</AlertDialogCancel>
+						<AlertDialogAction variant="destructive" onClick={handleDisconnect} disabled={isDisconnecting}>
+							{isDisconnecting ? "Disconnecting..." : "Disconnect"}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
@@ -218,45 +235,28 @@ function WhatsAppCard({ channel }: { channel: ChannelStatus }) {
 	);
 }
 
-function WhatsAppPairDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-	const { data, isLoading, error } = useQuery({
-		queryKey: ["whatsapp", "pair"],
-		queryFn: () => api.channels.status().then(() => fetch("/api/whatsapp/pair").then((r) => r.json())),
-		enabled: open,
-		refetchOnWindowFocus: false,
-	});
-
+function WhatsAppPairDialog({
+	open,
+	onOpenChange,
+	onConnected,
+}: {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	onConnected: () => void;
+}) {
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-w-sm">
+			<DialogContent
+				className="max-w-sm"
+				showCloseButton={false}
+				onInteractOutside={(e) => e.preventDefault()}
+				onEscapeKeyDown={(e) => e.preventDefault()}
+			>
 				<DialogHeader>
-					<DialogTitle>Pair WhatsApp</DialogTitle>
+					<DialogTitle>Connect WhatsApp</DialogTitle>
 					<DialogDescription>Scan this QR code with WhatsApp to connect your number.</DialogDescription>
 				</DialogHeader>
-				<div className="flex items-center justify-center py-4">
-					{isLoading && <div className="text-sm text-muted-foreground">Generating QR code...</div>}
-					{error && (
-						<div className="flex items-center gap-2 text-sm text-destructive">
-							<XCircleIcon size={16} />
-							<span>Failed to generate QR code</span>
-						</div>
-					)}
-					{data?.qr && (
-						<div className="rounded-lg border bg-white p-4">
-							<img
-								src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.qr)}`}
-								alt="WhatsApp QR Code"
-								className="size-[200px]"
-							/>
-						</div>
-					)}
-					{data?.status === "already_connected" && (
-						<div className="flex items-center gap-2 text-sm text-success">
-							<CheckIcon size={16} />
-							<span>Already connected</span>
-						</div>
-					)}
-				</div>
+				{open && <WhatsAppQR onConnected={onConnected} onCancel={() => onOpenChange(false)} />}
 			</DialogContent>
 		</Dialog>
 	);

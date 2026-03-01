@@ -18,6 +18,7 @@ import { validateSession } from "./auth";
 const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/session", "/api/health"]);
 const SETUP_PATHS_PREFIX = "/api/setup";
 const PUBLIC_SETUP_PATHS = new Set(["/api/setup/status", "/api/setup/account"]);
+const ONBOARDING_PATHS_PREFIX = "/api/whatsapp";
 
 type SettingsRepo = ReturnType<typeof createSettingsRepository>;
 
@@ -43,16 +44,20 @@ export function createAuthMiddleware(settings: SettingsRepo) {
 			// DB unavailable — let public paths through, block everything else
 		}
 
+		// WhatsApp pairing routes are needed during onboarding step 3 — treat
+		// them like setup paths so they're accessible before onboarding completes.
+		const isOnboardingPath = path.startsWith(ONBOARDING_PATHS_PREFIX);
+
 		// Setup bootstrap mode (no admin yet): only public paths + setup bootstrap.
 		if (!setupComplete && !hasAdmin) {
-			if (isPublicPath) {
+			if (isPublicPath || isOnboardingPath) {
 				return next();
 			}
 			return c.json({ error: { code: "SETUP_REQUIRED", message: "Onboarding not complete" } }, 503);
 		}
 
-		// During onboarding after admin exists, block non-setup API routes.
-		if (!setupComplete && !isSetupPath) {
+		// During onboarding after admin exists, allow setup + whatsapp routes (auth still required).
+		if (!setupComplete && !isSetupPath && !isOnboardingPath) {
 			if (isPublicPath) {
 				return next();
 			}

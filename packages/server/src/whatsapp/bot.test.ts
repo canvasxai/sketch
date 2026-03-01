@@ -1,6 +1,9 @@
 import type { proto } from "@whiskeysockets/baileys";
-import { describe, expect, it } from "vitest";
-import { extractText, hasMediaContent, jidToPhoneNumber } from "./bot";
+import type { Kysely } from "kysely";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { DB } from "../db/schema";
+import { createTestDb, createTestLogger } from "../test-utils";
+import { WhatsAppBot, extractText, hasMediaContent, jidToPhoneNumber } from "./bot";
 
 describe("extractText", () => {
 	it("returns text from conversation field", () => {
@@ -94,5 +97,84 @@ describe("jidToPhoneNumber", () => {
 
 	it("handles number with device suffix > 0", () => {
 		expect(jidToPhoneNumber("14155238886:2@s.whatsapp.net")).toBe("+14155238886");
+	});
+});
+
+describe("WhatsAppBot.phoneNumber", () => {
+	let db: Kysely<DB>;
+
+	beforeEach(async () => {
+		db = await createTestDb();
+	});
+
+	afterEach(async () => {
+		await db.destroy();
+	});
+
+	it("returns null when not connected (no socket)", () => {
+		const bot = new WhatsAppBot({ db, logger: createTestLogger() });
+		expect(bot.phoneNumber).toBeNull();
+	});
+
+	it("returns null when socket has no user", () => {
+		const bot = new WhatsAppBot({ db, logger: createTestLogger() });
+		// Access private sock field via cast to set up the test scenario
+		(bot as unknown as { sock: { user: undefined } }).sock = { user: undefined };
+		expect(bot.phoneNumber).toBeNull();
+	});
+
+	it("extracts phone number from sock.user.id (simple format)", () => {
+		const bot = new WhatsAppBot({ db, logger: createTestLogger() });
+		(bot as unknown as { sock: { user: { id: string } } }).sock = {
+			user: { id: "919876543210@s.whatsapp.net" },
+		};
+		expect(bot.phoneNumber).toBe("+919876543210");
+	});
+
+	it("extracts phone number from sock.user.id (LID format with device)", () => {
+		const bot = new WhatsAppBot({ db, logger: createTestLogger() });
+		(bot as unknown as { sock: { user: { id: string } } }).sock = {
+			user: { id: "14155238886:0@s.whatsapp.net" },
+		};
+		expect(bot.phoneNumber).toBe("+14155238886");
+	});
+});
+
+describe("WhatsAppBot.disconnect", () => {
+	let db: Kysely<DB>;
+
+	beforeEach(async () => {
+		db = await createTestDb();
+	});
+
+	afterEach(async () => {
+		await db.destroy();
+	});
+
+	it("clears credentials from DB", async () => {
+		const bot = new WhatsAppBot({ db, logger: createTestLogger() });
+
+		// Seed some creds so there's something to clear
+		await db.insertInto("whatsapp_creds").values({ id: "default", creds: "{}" }).execute();
+		await db.insertInto("whatsapp_keys").values({ type: "pre-key", key_id: "1", value: "{}" }).execute();
+
+		// Verify creds exist before disconnect
+		const before = await db.selectFrom("whatsapp_creds").selectAll().execute();
+		expect(before).toHaveLength(1);
+
+		await bot.disconnect();
+
+		// Verify creds and keys are cleared
+		const credsAfter = await db.selectFrom("whatsapp_creds").selectAll().execute();
+		const keysAfter = await db.selectFrom("whatsapp_keys").selectAll().execute();
+		expect(credsAfter).toHaveLength(0);
+		expect(keysAfter).toHaveLength(0);
+	});
+
+	it("is safe to call when not connected", async () => {
+		const bot = new WhatsAppBot({ db, logger: createTestLogger() });
+		// Should not throw
+		await bot.disconnect();
+		expect(bot.isConnected).toBe(false);
 	});
 });

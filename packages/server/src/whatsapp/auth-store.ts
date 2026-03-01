@@ -1,6 +1,7 @@
 import {
 	type AuthenticationCreds,
 	type AuthenticationState,
+	BufferJSON,
 	type SignalDataTypeMap,
 	initAuthCreds,
 	makeCacheableSignalKeyStore,
@@ -25,10 +26,10 @@ export async function createDbAuthState(
 	clearCreds: () => Promise<void>;
 }> {
 	const row = await db.selectFrom("whatsapp_creds").selectAll().where("id", "=", "default").executeTakeFirst();
-	const creds: AuthenticationCreds = row ? JSON.parse(row.creds) : initAuthCreds();
+	const creds: AuthenticationCreds = row ? JSON.parse(row.creds, BufferJSON.reviver) : initAuthCreds();
 
 	const saveCreds = async () => {
-		const json = JSON.stringify(creds);
+		const json = JSON.stringify(creds, BufferJSON.replacer);
 		const existing = await db.selectFrom("whatsapp_creds").select("id").where("id", "=", "default").executeTakeFirst();
 		if (existing) {
 			await db.updateTable("whatsapp_creds").set({ creds: json }).where("id", "=", "default").execute();
@@ -54,7 +55,7 @@ export async function createDbAuthState(
 
 				const result: { [id: string]: SignalDataTypeMap[T] } = {};
 				for (const row of rows) {
-					result[row.key_id] = JSON.parse(row.value);
+					result[row.key_id] = JSON.parse(row.value, BufferJSON.reviver);
 				}
 				return result;
 			},
@@ -64,7 +65,7 @@ export async function createDbAuthState(
 						if (value === null || value === undefined) {
 							await db.deleteFrom("whatsapp_keys").where("type", "=", type).where("key_id", "=", id).execute();
 						} else {
-							const json = JSON.stringify(value);
+							const json = JSON.stringify(value, BufferJSON.replacer);
 							const existing = await db
 								.selectFrom("whatsapp_keys")
 								.select("key_id")

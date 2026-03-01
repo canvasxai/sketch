@@ -52,6 +52,12 @@ export interface WhatsAppMessage {
 
 export type WhatsAppMessageHandler = (message: WhatsAppMessage) => Promise<void>;
 
+export interface PairingCallbacks {
+	onQr: (qr: string) => Promise<void>;
+	onConnected: (phoneNumber: string) => Promise<void>;
+	onError: (message: string) => Promise<void>;
+}
+
 export interface WhatsAppBotConfig {
 	db: Kysely<DB>;
 	logger: Logger;
@@ -66,6 +72,7 @@ export class WhatsAppBot {
 	private reconnectAttempt = 0;
 	private watchdogTimer: ReturnType<typeof setInterval> | null = null;
 	private lastMessageAt = 0;
+	private authState: Awaited<ReturnType<typeof createDbAuthState>> | null = null;
 
 	constructor(config: WhatsAppBotConfig) {
 		this.db = config.db;
@@ -94,10 +101,12 @@ export class WhatsAppBot {
 	}
 
 	/**
-	 * Start a fresh pairing session. Returns QR string via callback.
-	 * Called from /whatsapp/pair endpoint.
+	 * Start a fresh pairing session with SSE-friendly callbacks.
+	 * Emits multiple QR codes (each ~20-30s lifetime), a connected event on success,
+	 * or an error event on failure. Returns a promise that resolves when pairing
+	 * completes (connected or failed) — keeps the SSE stream alive until then.
 	 */
-	async startPairing(onQr: (qr: string) => void): Promise<void> {
+	async startPairing(callbacks: PairingCallbacks): Promise<void> {
 		if (this.sock) {
 			this.sock.end(undefined);
 			this.sock = null;
@@ -105,6 +114,7 @@ export class WhatsAppBot {
 		this.stopWatchdog();
 
 		const authState = await createDbAuthState(this.db, this.logger);
+		this.authState = authState;
 		const version = await getWaVersion();
 
 		this.sock = makeWASocket({
@@ -121,51 +131,79 @@ export class WhatsAppBot {
 
 		this.sock.ev.on("creds.update", authState.saveCreds);
 
-		this.sock.ev.on("connection.update", async (update) => {
-			const { connection, lastDisconnect, qr } = update;
+		return new Promise<void>((resolve) => {
+			this.sock?.ev.on("connection.update", async (update) => {
+				const { connection, lastDisconnect, qr } = update;
 
-			if (qr) {
-				onQr(qr);
-			}
-
-			if (connection === "open") {
-				this.logger.info("WhatsApp connected after pairing");
-				this.reconnectAttempt = 0;
-				this.registerMessageHandler();
-				this.startWatchdog();
-			}
-
-			if (connection === "close") {
-				const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-				const errorMsg = lastDisconnect?.error?.message ?? "";
-
-				// Code 515 = restart required after successful pairing
-				if (statusCode === DisconnectReason.restartRequired) {
-					this.logger.info("WhatsApp restart required after pairing — reconnecting");
-					await this.createSocket();
-					return;
+				if (qr) {
+					await callbacks.onQr(qr);
 				}
 
-				if (statusCode === DisconnectReason.loggedOut) {
-					this.logger.warn("WhatsApp logged out during pairing");
-					await authState.clearCreds();
-					this.stopWatchdog();
-					return;
+				if (connection === "open") {
+					this.logger.info("WhatsApp connected after pairing");
+					this.reconnectAttempt = 0;
+					this.registerMessageHandler();
+					this.startWatchdog();
+					await callbacks.onConnected(this.phoneNumber ?? "unknown");
+					resolve();
 				}
 
-				// QR expired without being scanned — clean up silently
-				if (errorMsg.includes("QR refs")) {
-					this.logger.info("WhatsApp QR expired — call /whatsapp/pair again to retry");
+				if (connection === "close") {
+					const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+					const errorMsg = lastDisconnect?.error?.message ?? "";
+
+					if (statusCode === DisconnectReason.restartRequired) {
+						this.logger.info("WhatsApp restart required after pairing — reconnecting");
+						await this.createSocket();
+						// Wait for the reconnected socket to open before sending the connected event.
+						// Without this, the SSE stream closes before the frontend receives "connected".
+						this.sock?.ev.on("connection.update", async (reconnectUpdate) => {
+							if (reconnectUpdate.connection === "open") {
+								await callbacks.onConnected(this.phoneNumber ?? "unknown");
+								resolve();
+							}
+							if (reconnectUpdate.connection === "close") {
+								await callbacks.onError("Connection failed after pairing");
+								resolve();
+							}
+						});
+						return;
+					}
+
+					if (statusCode === DisconnectReason.loggedOut) {
+						this.logger.warn("WhatsApp logged out during pairing");
+						await authState.clearCreds();
+						this.stopWatchdog();
+						await callbacks.onError("Logged out — please try again");
+						resolve();
+						return;
+					}
+
+					if (errorMsg.includes("QR refs")) {
+						this.logger.info("WhatsApp QR expired");
+						this.sock?.end(undefined);
+						this.sock = null;
+						await callbacks.onError("QR code expired");
+						resolve();
+						return;
+					}
+
+					this.logger.info({ statusCode, error: errorMsg }, "WhatsApp disconnected during pairing");
 					this.sock?.end(undefined);
 					this.sock = null;
-					return;
+					await callbacks.onError(errorMsg || "Connection closed");
+					resolve();
 				}
-
-				this.logger.info({ statusCode, error: errorMsg }, "WhatsApp disconnected during pairing");
-				this.sock?.end(undefined);
-				this.sock = null;
-			}
+			});
 		});
+	}
+
+	cancelPairing(): void {
+		try {
+			this.sock?.ws?.close();
+		} catch {
+			// Socket may already be closed
+		}
 	}
 
 	async stop(): Promise<void> {
@@ -176,8 +214,28 @@ export class WhatsAppBot {
 		}
 	}
 
+	async disconnect(): Promise<void> {
+		this.stopWatchdog();
+		if (this.sock) {
+			this.sock.end(undefined);
+			this.sock = null;
+		}
+		if (this.authState) {
+			await this.authState.clearCreds();
+			this.authState = null;
+		} else {
+			const authState = await createDbAuthState(this.db, this.logger);
+			await authState.clearCreds();
+		}
+	}
+
 	get isConnected(): boolean {
 		return this.sock?.user !== undefined;
+	}
+
+	get phoneNumber(): string | null {
+		if (!this.sock?.user?.id) return null;
+		return `+${this.sock.user.id.split(":")[0].split("@")[0]}`;
 	}
 
 	get socket(): WASocket | null {
@@ -235,6 +293,7 @@ export class WhatsAppBot {
 
 	private async createSocket(): Promise<void> {
 		const authState = await createDbAuthState(this.db, this.logger);
+		this.authState = authState;
 		const version = await getWaVersion();
 
 		this.sock = makeWASocket({

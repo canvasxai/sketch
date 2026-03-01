@@ -19,11 +19,13 @@ export function channelRoutes(deps: ChannelDeps) {
 				platform: "slack" as const,
 				configured: slackConfigured,
 				connected: slackConfigured ? true : null,
+				phoneNumber: null,
 			},
 			{
 				platform: "whatsapp" as const,
 				configured: !!deps.whatsapp,
 				connected: deps.whatsapp ? deps.whatsapp.isConnected : null,
+				phoneNumber: deps.whatsapp?.phoneNumber ?? null,
 			},
 		];
 

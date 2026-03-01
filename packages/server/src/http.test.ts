@@ -6,7 +6,7 @@ import { createSettingsRepository } from "./db/repositories/settings";
 import type { DB } from "./db/schema";
 import { createApp } from "./http";
 import { createTestConfig, createTestDb } from "./test-utils";
-import type { WhatsAppBot } from "./whatsapp/bot";
+import type { PairingCallbacks, WhatsAppBot } from "./whatsapp/bot";
 
 const config = createTestConfig();
 
@@ -91,7 +91,10 @@ describe("WhatsApp endpoints", () => {
 	function makeMockWhatsApp(overrides: Partial<WhatsAppBot> = {}): WhatsAppBot {
 		return {
 			isConnected: false,
+			phoneNumber: null,
 			startPairing: async () => {},
+			cancelPairing: () => {},
+			disconnect: async () => {},
 			...overrides,
 		} as WhatsAppBot;
 	}
@@ -107,7 +110,7 @@ describe("WhatsApp endpoints", () => {
 	}
 
 	describe("GET /api/whatsapp/pair", () => {
-		it("returns already_connected when bot is connected", async () => {
+		it("returns 400 when bot is already connected", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
 			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
@@ -116,35 +119,121 @@ describe("WhatsApp endpoints", () => {
 			const cookie = await loginAdmin(app);
 
 			const res = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
-			expect(res.status).toBe(200);
+			expect(res.status).toBe(400);
 
 			const body = await res.json();
-			expect(body.status).toBe("already_connected");
+			expect(body.error.code).toBe("ALREADY_CONNECTED");
 		});
 
-		it("returns QR string on successful pairing start", async () => {
+		it("returns 409 when pairing is already in progress", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
 			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
+
 			const whatsapp = makeMockWhatsApp({
-				startPairing: async (onQr: (qr: string) => void) => {
-					onQr("test-qr-string-data");
+				startPairing: () => new Promise<void>(() => {}),
+			} as unknown as Partial<WhatsAppBot>);
+			const app = createApp(db, config, { whatsapp });
+			const cookie = await loginAdmin(app);
+
+			// First request starts pairing
+			const res1 = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
+			res1.text().catch(() => {});
+			await new Promise((r) => setTimeout(r, 50));
+
+			// Second request should get 409
+			const res2 = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
+			expect(res2.status).toBe(409);
+
+			const body = await res2.json();
+			expect(body.error.code).toBe("PAIRING_IN_PROGRESS");
+		});
+
+		it("returns SSE stream with qr and connected events", async () => {
+			await seedAdmin(db);
+			const settings = createSettingsRepository(db);
+			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
+
+			const whatsapp = makeMockWhatsApp({
+				startPairing: async (callbacks: PairingCallbacks) => {
+					await callbacks.onQr("test-qr-data-123");
+					await callbacks.onConnected("+919876543210");
 				},
-			} as Partial<WhatsAppBot>);
+			} as unknown as Partial<WhatsAppBot>);
+			const app = createApp(db, config, { whatsapp });
+			const cookie = await loginAdmin(app);
+
+			const res = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
+			expect(res.status).toBe(200);
+			expect(res.headers.get("content-type")).toContain("text/event-stream");
+
+			const text = await res.text();
+			expect(text).toContain('event: qr\ndata: {"qr":"test-qr-data-123"}');
+			expect(text).toContain('event: connected\ndata: {"phoneNumber":"+919876543210"}');
+		});
+
+		it("returns SSE stream with error event on failure", async () => {
+			await seedAdmin(db);
+			const settings = createSettingsRepository(db);
+			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
+
+			const whatsapp = makeMockWhatsApp({
+				startPairing: async (callbacks: PairingCallbacks) => {
+					await callbacks.onQr("qr-before-failure");
+					await callbacks.onError("QR code expired");
+				},
+			} as unknown as Partial<WhatsAppBot>);
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
 
 			const res = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
 			expect(res.status).toBe(200);
 
-			const body = await res.json();
-			expect(body.status).toBe("pairing");
-			expect(body.qr).toBe("test-qr-string-data");
+			const text = await res.text();
+			expect(text).toContain("event: qr");
+			expect(text).toContain('event: error\ndata: {"message":"QR code expired"}');
 		});
 	});
 
-	describe("GET /api/whatsapp/status", () => {
-		it("returns connected false when bot is disconnected", async () => {
+	describe("GET /api/whatsapp", () => {
+		it("returns connected false with null phone when bot is disconnected", async () => {
+			await seedAdmin(db);
+			const settings = createSettingsRepository(db);
+			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
+			const whatsapp = makeMockWhatsApp({ isConnected: false, phoneNumber: null } as Partial<WhatsAppBot>);
+			const app = createApp(db, config, { whatsapp });
+			const cookie = await loginAdmin(app);
+
+			const res = await app.request("/api/whatsapp", { headers: { Cookie: cookie } });
+			expect(res.status).toBe(200);
+
+			const body = await res.json();
+			expect(body.connected).toBe(false);
+			expect(body.phoneNumber).toBeNull();
+		});
+
+		it("returns connected true with phone number when bot is connected", async () => {
+			await seedAdmin(db);
+			const settings = createSettingsRepository(db);
+			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
+			const whatsapp = makeMockWhatsApp({
+				isConnected: true,
+				phoneNumber: "+919876543210",
+			} as Partial<WhatsAppBot>);
+			const app = createApp(db, config, { whatsapp });
+			const cookie = await loginAdmin(app);
+
+			const res = await app.request("/api/whatsapp", { headers: { Cookie: cookie } });
+			expect(res.status).toBe(200);
+
+			const body = await res.json();
+			expect(body.connected).toBe(true);
+			expect(body.phoneNumber).toBe("+919876543210");
+		});
+	});
+
+	describe("DELETE /api/whatsapp", () => {
+		it("returns 400 when not connected", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
 			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
@@ -152,26 +241,82 @@ describe("WhatsApp endpoints", () => {
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp/status", { headers: { Cookie: cookie } });
-			expect(res.status).toBe(200);
+			const res = await app.request("/api/whatsapp", { method: "DELETE", headers: { Cookie: cookie } });
+			expect(res.status).toBe(400);
 
 			const body = await res.json();
-			expect(body.connected).toBe(false);
+			expect(body.error.code).toBe("NOT_CONNECTED");
 		});
 
-		it("returns connected true when bot is connected", async () => {
+		it("disconnects successfully when connected", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
 			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
-			const whatsapp = makeMockWhatsApp({ isConnected: true } as Partial<WhatsAppBot>);
+			const disconnectFn = vi.fn();
+			const whatsapp = makeMockWhatsApp({
+				isConnected: true,
+				disconnect: disconnectFn,
+			} as unknown as Partial<WhatsAppBot>);
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp/status", { headers: { Cookie: cookie } });
+			const res = await app.request("/api/whatsapp", { method: "DELETE", headers: { Cookie: cookie } });
 			expect(res.status).toBe(200);
 
 			const body = await res.json();
-			expect(body.connected).toBe(true);
+			expect(body.success).toBe(true);
+			expect(disconnectFn).toHaveBeenCalled();
+		});
+	});
+
+	describe("DELETE /api/whatsapp/pair", () => {
+		it("returns 400 when no pairing in progress", async () => {
+			await seedAdmin(db);
+			const settings = createSettingsRepository(db);
+			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
+			const whatsapp = makeMockWhatsApp();
+			const app = createApp(db, config, { whatsapp });
+			const cookie = await loginAdmin(app);
+
+			const res = await app.request("/api/whatsapp/pair", { method: "DELETE", headers: { Cookie: cookie } });
+			expect(res.status).toBe(400);
+
+			const body = await res.json();
+			expect(body.error.code).toBe("NO_PAIRING");
+		});
+
+		it("cancels an in-progress pairing", async () => {
+			await seedAdmin(db);
+			const settings = createSettingsRepository(db);
+			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
+
+			// Mock where cancelPairing resolves the startPairing promise (like real sock.ws.close())
+			let resolvePairing: (() => void) | null = null;
+			const whatsapp = makeMockWhatsApp({
+				startPairing: async (callbacks: PairingCallbacks) => {
+					await new Promise<void>((r) => {
+						resolvePairing = r;
+					});
+					await callbacks.onError("Connection closed");
+				},
+				cancelPairing: () => {
+					resolvePairing?.();
+				},
+			} as unknown as Partial<WhatsAppBot>);
+			const app = createApp(db, config, { whatsapp });
+			const cookie = await loginAdmin(app);
+
+			// Start pairing
+			const res1 = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
+			res1.text().catch(() => {});
+			await new Promise((r) => setTimeout(r, 50));
+
+			// Cancel it — should wait for startPairing to resolve before responding
+			const res = await app.request("/api/whatsapp/pair", { method: "DELETE", headers: { Cookie: cookie } });
+			expect(res.status).toBe(200);
+
+			const body = await res.json();
+			expect(body.success).toBe(true);
 		});
 	});
 
@@ -187,14 +332,14 @@ describe("WhatsApp endpoints", () => {
 			expect(res.status).toBe(404);
 		});
 
-		it("returns 404 for /api/whatsapp/status when no bot provided", async () => {
+		it("returns 404 for /api/whatsapp when no bot provided", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
 			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
 			const app = createApp(db, config);
 			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp/status", { headers: { Cookie: cookie } });
+			const res = await app.request("/api/whatsapp", { headers: { Cookie: cookie } });
 			expect(res.status).toBe(404);
 		});
 	});
@@ -351,10 +496,15 @@ describe("Auth middleware", () => {
 		await seedAdmin(db);
 		const settings = createSettingsRepository(db);
 		await settings.update({ onboardingCompletedAt: new Date().toISOString() });
-		const whatsapp = { isConnected: false, startPairing: async () => {} } as unknown as WhatsAppBot;
+		const whatsapp = {
+			isConnected: false,
+			phoneNumber: null,
+			startPairing: async () => {},
+			disconnect: async () => {},
+		} as unknown as WhatsAppBot;
 		const app = createApp(db, config, { whatsapp });
 
-		const res = await app.request("/api/whatsapp/status");
+		const res = await app.request("/api/whatsapp");
 		expect(res.status).toBe(401);
 	});
 
@@ -362,12 +512,12 @@ describe("Auth middleware", () => {
 		await seedAdmin(db);
 		const settings = createSettingsRepository(db);
 		await settings.update({ onboardingCompletedAt: new Date().toISOString() });
-		const whatsapp = { isConnected: true } as unknown as WhatsAppBot;
+		const whatsapp = { isConnected: true, phoneNumber: null } as unknown as WhatsAppBot;
 		const app = createApp(db, config, { whatsapp });
 
 		const cookie = await loginAdmin(app);
 
-		const res = await app.request("/api/whatsapp/status", {
+		const res = await app.request("/api/whatsapp", {
 			headers: { Cookie: cookie },
 		});
 		expect(res.status).toBe(200);
@@ -381,13 +531,24 @@ describe("Auth middleware", () => {
 	});
 
 	it("returns 503 for protected routes when setup incomplete", async () => {
-		const whatsapp = { isConnected: false } as unknown as WhatsAppBot;
-		const app = createApp(db, config, { whatsapp });
+		const app = createApp(db, config);
 
-		const res = await app.request("/api/whatsapp/status");
+		const res = await app.request("/api/channels/status");
 		expect(res.status).toBe(503);
 		const body = await res.json();
 		expect(body.error.code).toBe("SETUP_REQUIRED");
+	});
+
+	it("allows whatsapp routes during onboarding with valid session", async () => {
+		await seedAdmin(db);
+		const whatsapp = { isConnected: false, phoneNumber: null } as unknown as WhatsAppBot;
+		const app = createApp(db, config, { whatsapp });
+		const cookie = await loginAdmin(app);
+
+		const res = await app.request("/api/whatsapp", { headers: { Cookie: cookie } });
+		expect(res.status).toBe(200);
+		const body = await res.json();
+		expect(body.connected).toBe(false);
 	});
 
 	it("allows public setup routes when setup is incomplete", async () => {
