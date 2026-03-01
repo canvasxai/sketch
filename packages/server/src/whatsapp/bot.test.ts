@@ -1,6 +1,6 @@
 import type { proto } from "@whiskeysockets/baileys";
 import type { Kysely } from "kysely";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DB } from "../db/schema";
 import { createTestDb, createTestLogger } from "../test-utils";
 import { WhatsAppBot, extractText, hasMediaContent, jidToPhoneNumber } from "./bot";
@@ -184,5 +184,84 @@ describe("WhatsAppBot.disconnect", () => {
 		// Should not throw
 		await bot.disconnect();
 		expect(bot.isConnected).toBe(false);
+	});
+});
+
+describe("WhatsAppBot.composing", () => {
+	let db: Kysely<DB>;
+
+	beforeEach(async () => {
+		vi.useFakeTimers();
+		db = await createTestDb();
+	});
+
+	afterEach(async () => {
+		vi.useRealTimers();
+		await db.destroy();
+	});
+
+	function createBotWithMockSock() {
+		const bot = new WhatsAppBot({ db, logger: createTestLogger() });
+		const sendPresenceUpdate = vi.fn().mockResolvedValue(undefined);
+		(bot as unknown as { sock: { sendPresenceUpdate: typeof sendPresenceUpdate } }).sock = {
+			sendPresenceUpdate,
+		};
+		return { bot, sendPresenceUpdate };
+	}
+
+	it("sends composing immediately on startComposing", () => {
+		const { bot, sendPresenceUpdate } = createBotWithMockSock();
+		bot.startComposing("123@s.whatsapp.net");
+		expect(sendPresenceUpdate).toHaveBeenCalledWith("composing", "123@s.whatsapp.net");
+		bot.stopComposing("123@s.whatsapp.net");
+	});
+
+	it("re-sends composing every 5 seconds", () => {
+		const { bot, sendPresenceUpdate } = createBotWithMockSock();
+		bot.startComposing("123@s.whatsapp.net");
+		expect(sendPresenceUpdate).toHaveBeenCalledTimes(1);
+
+		vi.advanceTimersByTime(5000);
+		expect(sendPresenceUpdate).toHaveBeenCalledTimes(2);
+
+		vi.advanceTimersByTime(5000);
+		expect(sendPresenceUpdate).toHaveBeenCalledTimes(3);
+
+		bot.stopComposing("123@s.whatsapp.net");
+	});
+
+	it("stopComposing clears interval and sends paused", () => {
+		const { bot, sendPresenceUpdate } = createBotWithMockSock();
+		bot.startComposing("123@s.whatsapp.net");
+		sendPresenceUpdate.mockClear();
+
+		bot.stopComposing("123@s.whatsapp.net");
+		expect(sendPresenceUpdate).toHaveBeenCalledWith("paused", "123@s.whatsapp.net");
+
+		// No more composing calls after stop
+		vi.advanceTimersByTime(10_000);
+		expect(sendPresenceUpdate).toHaveBeenCalledTimes(1); // only the paused call
+	});
+
+	it("auto-stops after TTL (3 minutes)", () => {
+		const { bot, sendPresenceUpdate } = createBotWithMockSock();
+		bot.startComposing("123@s.whatsapp.net");
+		sendPresenceUpdate.mockClear();
+
+		vi.advanceTimersByTime(3 * 60_000);
+		// Should have sent paused via TTL auto-cleanup
+		expect(sendPresenceUpdate).toHaveBeenCalledWith("paused", "123@s.whatsapp.net");
+
+		// No more composing after TTL
+		sendPresenceUpdate.mockClear();
+		vi.advanceTimersByTime(10_000);
+		expect(sendPresenceUpdate).not.toHaveBeenCalled();
+	});
+
+	it("startComposing is safe when no socket", () => {
+		const bot = new WhatsAppBot({ db, logger: createTestLogger() });
+		// Should not throw
+		bot.startComposing("123@s.whatsapp.net");
+		bot.stopComposing("123@s.whatsapp.net");
 	});
 });

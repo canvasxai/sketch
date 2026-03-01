@@ -1,7 +1,7 @@
 import type { Boom } from "@hapi/boom";
 /**
  * WhatsApp adapter using Baileys — connection management, message handling,
- * reconnection with exponential backoff, thinking indicators, echo detection.
+ * reconnection with exponential backoff, composing indicators, echo detection.
  *
  * DMs only (messages from @s.whatsapp.net or @lid JIDs). Groups filtered out.
  * LID JIDs are resolved to phone numbers via Baileys' signalRepository.lidMapping.
@@ -22,8 +22,9 @@ import type { Logger } from "../logger";
 import { createDbAuthState } from "./auth-store";
 import { chunkText } from "./chunking";
 
-const THINKING_EMOJIS = ["⏳", "🧠", "🤔", "💭", "⚡", "✨", "🔮"];
 const ECHO_TTL_MS = 60_000;
+const COMPOSING_INTERVAL_MS = 5_000;
+const COMPOSING_TTL_MS = 3 * 60_000;
 const WATCHDOG_INTERVAL_MS = 60_000;
 const WATCHDOG_STALE_MS = 30 * 60_000;
 const RECONNECT_BASE_MS = 2000;
@@ -74,6 +75,10 @@ export class WhatsAppBot {
 	private watchdogTimer: ReturnType<typeof setInterval> | null = null;
 	private lastMessageAt = 0;
 	private authState: Awaited<ReturnType<typeof createDbAuthState>> | null = null;
+	private composingTimers = new Map<
+		string,
+		{ interval: ReturnType<typeof setInterval>; ttl: ReturnType<typeof setTimeout> }
+	>();
 
 	constructor(config: WhatsAppBotConfig) {
 		this.db = config.db;
@@ -278,20 +283,29 @@ export class WhatsAppBot {
 		}
 	}
 
-	async reactThinking(jid: string, key: proto.IMessageKey): Promise<void> {
+	startComposing(jid: string): void {
+		this.stopComposing(jid);
 		if (!this.sock) return;
-		const emoji = THINKING_EMOJIS[Math.floor(Math.random() * THINKING_EMOJIS.length)];
-		await this.sock.sendMessage(jid, { react: { text: emoji, key } });
+
+		this.sock.sendPresenceUpdate("composing", jid).catch(() => {});
+
+		const interval = setInterval(() => {
+			this.sock?.sendPresenceUpdate("composing", jid).catch(() => {});
+		}, COMPOSING_INTERVAL_MS);
+
+		const ttl = setTimeout(() => this.stopComposing(jid), COMPOSING_TTL_MS);
+
+		this.composingTimers.set(jid, { interval, ttl });
 	}
 
-	async removeReaction(jid: string, key: proto.IMessageKey): Promise<void> {
-		if (!this.sock) return;
-		await this.sock.sendMessage(jid, { react: { text: "", key } });
-	}
+	stopComposing(jid: string): void {
+		const timer = this.composingTimers.get(jid);
+		if (!timer) return;
 
-	async sendComposing(jid: string): Promise<void> {
-		if (!this.sock) return;
-		await this.sock.sendPresenceUpdate("composing", jid);
+		clearInterval(timer.interval);
+		clearTimeout(timer.ttl);
+		this.composingTimers.delete(jid);
+		this.sock?.sendPresenceUpdate("paused", jid).catch(() => {});
 	}
 
 	// --- Internal ---

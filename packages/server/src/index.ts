@@ -397,12 +397,8 @@ whatsapp.onMessage(async (message) => {
 	queue.enqueue(async () => {
 		const workspaceDir = await ensureWorkspace(config, user.id);
 		const settingsRow = await settingsRepo.get();
-		const msgKey = message.rawMessage.key;
-		if (!msgKey) return;
 
-		// Thinking indicator
-		await whatsapp.reactThinking(message.jid, msgKey);
-		await whatsapp.sendComposing(message.jid);
+		whatsapp.startComposing(message.jid);
 
 		try {
 			// Download media if present
@@ -423,7 +419,7 @@ whatsapp.onMessage(async (message) => {
 				}
 			}
 
-			const { onMessage, isReactionRemoved } = createWhatsAppMessageHandler(whatsapp, message.jid, msgKey);
+			const onMessage = createWhatsAppMessageHandler(whatsapp, message.jid);
 
 			const result = await runAgent({
 				userMessage: message.text || "See attached files.",
@@ -436,11 +432,6 @@ whatsapp.onMessage(async (message) => {
 				botName: settingsRow?.bot_name,
 				attachments: attachments.length > 0 ? attachments : undefined,
 			});
-
-			// Remove thinking reaction if no messages were sent
-			if (!isReactionRemoved() && whatsapp.isConnected) {
-				await whatsapp.removeReaction(message.jid, msgKey);
-			}
 
 			// Upload pending files
 			for (const filePath of result.pendingUploads) {
@@ -457,9 +448,10 @@ whatsapp.onMessage(async (message) => {
 		} catch (err) {
 			logger.error({ err, userId: user.id }, "Agent run failed (WhatsApp)");
 			if (whatsapp.isConnected) {
-				await whatsapp.removeReaction(message.jid, msgKey);
 				await whatsapp.sendText(message.jid, "Something went wrong, try again.");
 			}
+		} finally {
+			whatsapp.stopComposing(message.jid);
 		}
 	});
 });
