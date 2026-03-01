@@ -52,7 +52,7 @@ export function ChannelsPage() {
 	const { data, isLoading } = useQuery({
 		queryKey: ["channels", "status"],
 		queryFn: () => api.channels.status(),
-		refetchInterval: 10000,
+		refetchInterval: 60000,
 	});
 
 	const allDisconnected = data?.channels?.every((ch) => ch.connected !== true);
