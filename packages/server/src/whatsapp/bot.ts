@@ -3,7 +3,8 @@ import type { Boom } from "@hapi/boom";
  * WhatsApp adapter using Baileys — connection management, message handling,
  * reconnection with exponential backoff, thinking indicators, echo detection.
  *
- * DMs only (messages from @s.whatsapp.net JIDs). Groups filtered out.
+ * DMs only (messages from @s.whatsapp.net or @lid JIDs). Groups filtered out.
+ * LID JIDs are resolved to phone numbers via Baileys' signalRepository.lidMapping.
  * Auth state persisted in DB via createDbAuthState.
  */
 import {
@@ -358,7 +359,12 @@ export class WhatsAppBot {
 				if (msg.key.fromMe) continue;
 
 				const jid = msg.key.remoteJid;
-				if (!jid || !jid.endsWith("@s.whatsapp.net")) continue;
+				if (!jid) continue;
+
+				// Accept DMs only — @s.whatsapp.net (standard) or @lid (Linked Identity)
+				const isStandardDm = jid.endsWith("@s.whatsapp.net");
+				const isLidDm = jid.endsWith("@lid");
+				if (!isStandardDm && !isLidDm) continue;
 
 				if (msg.key.id && this.recentlySent.has(msg.key.id)) continue;
 
@@ -368,14 +374,28 @@ export class WhatsAppBot {
 
 				if (!text && !hasMedia) continue;
 
-				const phoneNumber = jidToPhoneNumber(jid);
+				// Resolve phone number — standard JIDs have it directly, LID JIDs need mapping
+				let phoneNumber: string | null = null;
+				let replyJid = jid;
+
+				if (isStandardDm) {
+					phoneNumber = jidToPhoneNumber(jid);
+				} else {
+					phoneNumber = await this.resolveLidToPhone(jid);
+					if (!phoneNumber) {
+						this.logger.warn({ lid: jid }, "Could not resolve LID to phone number — dropping message");
+						continue;
+					}
+					// Reply to the LID JID directly — Baileys handles the routing
+					replyJid = jid;
+				}
 
 				if (this.handler) {
 					this.lastMessageAt = Date.now();
 					await this.handler({
 						text: text ?? "",
 						phoneNumber,
-						jid,
+						jid: replyJid,
 						messageId: msg.key.id ?? "",
 						pushName: msg.pushName ?? "Unknown",
 						rawMessage: msg,
@@ -384,6 +404,22 @@ export class WhatsAppBot {
 				}
 			}
 		});
+	}
+
+	/**
+	 * Resolve a LID JID to an E.164 phone number using Baileys' in-memory mapping.
+	 * Returns null if the mapping is unavailable.
+	 */
+	private async resolveLidToPhone(lidJid: string): Promise<string | null> {
+		try {
+			const pnJid = await this.sock?.signalRepository?.lidMapping?.getPNForLID(lidJid);
+			if (pnJid) {
+				return jidToPhoneNumber(pnJid);
+			}
+		} catch (err) {
+			this.logger.debug({ lid: lidJid, err }, "LID mapping lookup failed");
+		}
+		return null;
 	}
 
 	private trackSentMessage(messageId: string): void {
@@ -432,7 +468,7 @@ export function hasMediaContent(messageType: string | undefined): boolean {
 }
 
 export function jidToPhoneNumber(jid: string): string {
-	const raw = jid.replace("@s.whatsapp.net", "");
+	const raw = jid.replace("@s.whatsapp.net", "").replace("@lid", "");
 	const number = raw.includes(":") ? raw.split(":")[0] : raw;
 	return `+${number}`;
 }

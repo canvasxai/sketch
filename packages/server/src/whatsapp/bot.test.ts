@@ -98,6 +98,14 @@ describe("jidToPhoneNumber", () => {
 	it("handles number with device suffix > 0", () => {
 		expect(jidToPhoneNumber("14155238886:2@s.whatsapp.net")).toBe("+14155238886");
 	});
+
+	it("handles @lid JID format", () => {
+		expect(jidToPhoneNumber("86702773280883@lid")).toBe("+86702773280883");
+	});
+
+	it("handles @lid JID with device suffix", () => {
+		expect(jidToPhoneNumber("86702773280883:0@lid")).toBe("+86702773280883");
+	});
 });
 
 describe("WhatsAppBot.phoneNumber", () => {
