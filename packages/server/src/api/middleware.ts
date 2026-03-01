@@ -50,7 +50,7 @@ export function createAuthMiddleware(settings: SettingsRepo) {
 
 		// Setup bootstrap mode (no admin yet): only public paths + setup bootstrap.
 		if (!setupComplete && !hasAdmin) {
-			if (isPublicPath || isOnboardingPath) {
+			if (isPublicPath) {
 				return next();
 			}
 			return c.json({ error: { code: "SETUP_REQUIRED", message: "Onboarding not complete" } }, 503);
