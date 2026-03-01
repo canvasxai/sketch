@@ -1,5 +1,6 @@
 /**
  * WhatsApp API routes — SSE-based QR pairing, connection status, disconnect.
+ * Mounted at /api/channels/whatsapp.
  *
  * GET    /           — connection status + phone number
  * GET    /pair       — SSE stream for QR pairing (events: qr, connected, error)

@@ -1,10 +1,10 @@
 /**
  * Shared WhatsApp QR pairing component — used by both onboarding and channels page.
- * Opens an SSE connection to GET /api/whatsapp/pair, renders QR codes as they arrive,
+ * Opens an SSE connection to GET /api/channels/whatsapp/pair, renders QR codes as they arrive,
  * and detects scan completion in real-time.
  *
  * While pairing is active, a Cancel button is shown. Cancelling calls
- * DELETE /api/whatsapp/pair to abort the server-side session.
+ * DELETE /api/channels/whatsapp/pair to abort the server-side session.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -63,7 +63,7 @@ export function WhatsAppQR({ onConnected, onCancel, onError, autoStart = true }:
 		setQrDataUrl(null);
 		setErrorMessage(null);
 
-		const es = new EventSource("/api/whatsapp/pair");
+		const es = new EventSource("/api/channels/whatsapp/pair");
 		eventSourceRef.current = es;
 
 		es.addEventListener("qr", async (e) => {

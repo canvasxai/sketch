@@ -19,7 +19,7 @@ import { SESSION_COOKIE } from "./auth";
 const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/session", "/api/health"]);
 const SETUP_PATHS_PREFIX = "/api/setup";
 const PUBLIC_SETUP_PATHS = new Set(["/api/setup/status", "/api/setup/account"]);
-const ONBOARDING_PATHS_PREFIX = "/api/whatsapp";
+const ONBOARDING_PATHS_PREFIX = "/api/channels/whatsapp";
 
 type SettingsRepo = ReturnType<typeof createSettingsRepository>;
 

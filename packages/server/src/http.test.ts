@@ -108,7 +108,7 @@ describe("WhatsApp endpoints", () => {
 		return res.headers.get("set-cookie") ?? "";
 	}
 
-	describe("GET /api/whatsapp/pair", () => {
+	describe("GET /api/channels/whatsapp/pair", () => {
 		it("returns 400 when bot is already connected", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
@@ -117,7 +117,7 @@ describe("WhatsApp endpoints", () => {
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
+			const res = await app.request("/api/channels/whatsapp/pair", { headers: { Cookie: cookie } });
 			expect(res.status).toBe(400);
 
 			const body = await res.json();
@@ -136,12 +136,12 @@ describe("WhatsApp endpoints", () => {
 			const cookie = await loginAdmin(app);
 
 			// First request starts pairing
-			const res1 = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
+			const res1 = await app.request("/api/channels/whatsapp/pair", { headers: { Cookie: cookie } });
 			res1.text().catch(() => {});
 			await new Promise((r) => setTimeout(r, 50));
 
 			// Second request should get 409
-			const res2 = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
+			const res2 = await app.request("/api/channels/whatsapp/pair", { headers: { Cookie: cookie } });
 			expect(res2.status).toBe(409);
 
 			const body = await res2.json();
@@ -162,7 +162,7 @@ describe("WhatsApp endpoints", () => {
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
+			const res = await app.request("/api/channels/whatsapp/pair", { headers: { Cookie: cookie } });
 			expect(res.status).toBe(200);
 			expect(res.headers.get("content-type")).toContain("text/event-stream");
 
@@ -185,7 +185,7 @@ describe("WhatsApp endpoints", () => {
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
+			const res = await app.request("/api/channels/whatsapp/pair", { headers: { Cookie: cookie } });
 			expect(res.status).toBe(200);
 
 			const text = await res.text();
@@ -194,7 +194,7 @@ describe("WhatsApp endpoints", () => {
 		});
 	});
 
-	describe("GET /api/whatsapp", () => {
+	describe("GET /api/channels/whatsapp", () => {
 		it("returns connected false with null phone when bot is disconnected", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
@@ -203,7 +203,7 @@ describe("WhatsApp endpoints", () => {
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp", { headers: { Cookie: cookie } });
+			const res = await app.request("/api/channels/whatsapp", { headers: { Cookie: cookie } });
 			expect(res.status).toBe(200);
 
 			const body = await res.json();
@@ -222,7 +222,7 @@ describe("WhatsApp endpoints", () => {
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp", { headers: { Cookie: cookie } });
+			const res = await app.request("/api/channels/whatsapp", { headers: { Cookie: cookie } });
 			expect(res.status).toBe(200);
 
 			const body = await res.json();
@@ -231,7 +231,7 @@ describe("WhatsApp endpoints", () => {
 		});
 	});
 
-	describe("DELETE /api/whatsapp", () => {
+	describe("DELETE /api/channels/whatsapp", () => {
 		it("returns 400 when not connected", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
@@ -240,7 +240,7 @@ describe("WhatsApp endpoints", () => {
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp", { method: "DELETE", headers: { Cookie: cookie } });
+			const res = await app.request("/api/channels/whatsapp", { method: "DELETE", headers: { Cookie: cookie } });
 			expect(res.status).toBe(400);
 
 			const body = await res.json();
@@ -259,7 +259,7 @@ describe("WhatsApp endpoints", () => {
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp", { method: "DELETE", headers: { Cookie: cookie } });
+			const res = await app.request("/api/channels/whatsapp", { method: "DELETE", headers: { Cookie: cookie } });
 			expect(res.status).toBe(200);
 
 			const body = await res.json();
@@ -268,7 +268,7 @@ describe("WhatsApp endpoints", () => {
 		});
 	});
 
-	describe("DELETE /api/whatsapp/pair", () => {
+	describe("DELETE /api/channels/whatsapp/pair", () => {
 		it("returns 400 when no pairing in progress", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
@@ -277,7 +277,7 @@ describe("WhatsApp endpoints", () => {
 			const app = createApp(db, config, { whatsapp });
 			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp/pair", { method: "DELETE", headers: { Cookie: cookie } });
+			const res = await app.request("/api/channels/whatsapp/pair", { method: "DELETE", headers: { Cookie: cookie } });
 			expect(res.status).toBe(400);
 
 			const body = await res.json();
@@ -306,12 +306,12 @@ describe("WhatsApp endpoints", () => {
 			const cookie = await loginAdmin(app);
 
 			// Start pairing
-			const res1 = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
+			const res1 = await app.request("/api/channels/whatsapp/pair", { headers: { Cookie: cookie } });
 			res1.text().catch(() => {});
 			await new Promise((r) => setTimeout(r, 50));
 
 			// Cancel it — should wait for startPairing to resolve before responding
-			const res = await app.request("/api/whatsapp/pair", { method: "DELETE", headers: { Cookie: cookie } });
+			const res = await app.request("/api/channels/whatsapp/pair", { method: "DELETE", headers: { Cookie: cookie } });
 			expect(res.status).toBe(200);
 
 			const body = await res.json();
@@ -320,25 +320,25 @@ describe("WhatsApp endpoints", () => {
 	});
 
 	describe("endpoints absent without WhatsApp bot", () => {
-		it("returns 404 for /api/whatsapp/pair when no bot provided", async () => {
+		it("returns 404 for /api/channels/whatsapp/pair when no bot provided", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
 			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
 			const app = createApp(db, config);
 			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp/pair", { headers: { Cookie: cookie } });
+			const res = await app.request("/api/channels/whatsapp/pair", { headers: { Cookie: cookie } });
 			expect(res.status).toBe(404);
 		});
 
-		it("returns 404 for /api/whatsapp when no bot provided", async () => {
+		it("returns 404 for /api/channels/whatsapp when no bot provided", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
 			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
 			const app = createApp(db, config);
 			const cookie = await loginAdmin(app);
 
-			const res = await app.request("/api/whatsapp", { headers: { Cookie: cookie } });
+			const res = await app.request("/api/channels/whatsapp", { headers: { Cookie: cookie } });
 			expect(res.status).toBe(404);
 		});
 	});
@@ -664,7 +664,7 @@ describe("Auth middleware", () => {
 		} as unknown as WhatsAppBot;
 		const app = createApp(db, config, { whatsapp });
 
-		const res = await app.request("/api/whatsapp");
+		const res = await app.request("/api/channels/whatsapp");
 		expect(res.status).toBe(401);
 	});
 
@@ -677,7 +677,7 @@ describe("Auth middleware", () => {
 
 		const cookie = await loginAdmin(app);
 
-		const res = await app.request("/api/whatsapp", {
+		const res = await app.request("/api/channels/whatsapp", {
 			headers: { Cookie: cookie },
 		});
 		expect(res.status).toBe(200);
@@ -705,7 +705,7 @@ describe("Auth middleware", () => {
 		const app = createApp(db, config, { whatsapp });
 		const cookie = await loginAdmin(app);
 
-		const res = await app.request("/api/whatsapp", { headers: { Cookie: cookie } });
+		const res = await app.request("/api/channels/whatsapp", { headers: { Cookie: cookie } });
 		expect(res.status).toBe(200);
 		const body = await res.json();
 		expect(body.connected).toBe(false);

@@ -52,7 +52,7 @@ export function createApp(db: Kysely<DB>, _config: Config, deps?: AppDeps) {
 	);
 
 	if (deps?.whatsapp) {
-		app.route("/api/whatsapp", whatsappRoutes(deps.whatsapp));
+		app.route("/api/channels/whatsapp", whatsappRoutes(deps.whatsapp));
 	}
 
 	// Static file serving for the SPA (production only — dev uses Vite dev server)

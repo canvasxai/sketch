@@ -121,13 +121,13 @@ export const api = {
 	},
 	whatsapp: {
 		status() {
-			return request<{ connected: boolean; phoneNumber: string | null }>("/api/whatsapp");
+			return request<{ connected: boolean; phoneNumber: string | null }>("/api/channels/whatsapp");
 		},
 		cancelPairing() {
-			return request<{ success: boolean }>("/api/whatsapp/pair", { method: "DELETE" });
+			return request<{ success: boolean }>("/api/channels/whatsapp/pair", { method: "DELETE" });
 		},
 		disconnect() {
-			return request<{ success: boolean }>("/api/whatsapp", { method: "DELETE" });
+			return request<{ success: boolean }>("/api/channels/whatsapp", { method: "DELETE" });
 		},
 	},
 	settings: {

@@ -492,11 +492,11 @@ const whatsappConnected = await whatsapp.start();
 if (whatsappConnected) {
 	logger.info("WhatsApp connected");
 } else {
-	logger.info("WhatsApp not paired — use GET /api/whatsapp/pair to connect");
+	logger.info("WhatsApp not paired — use GET /api/channels/whatsapp/pair to connect");
 }
 
 if (!slack && !whatsappConnected) {
-	logger.info("No channels active — pair WhatsApp via GET /api/whatsapp/pair or configure Slack tokens");
+	logger.info("No channels active — pair WhatsApp via GET /api/channels/whatsapp/pair or configure Slack tokens");
 }
 
 // 11. Graceful shutdown
