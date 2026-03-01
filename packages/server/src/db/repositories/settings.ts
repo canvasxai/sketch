@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { Kysely } from "kysely";
 import type { DB } from "../schema.js";
 
@@ -15,6 +16,7 @@ export function createSettingsRepository(db: Kysely<DB>) {
 					id: "default",
 					admin_email: data.adminEmail,
 					admin_password_hash: data.adminPasswordHash,
+					jwt_secret: randomBytes(32).toString("hex"),
 				})
 				.execute();
 
@@ -35,11 +37,13 @@ export function createSettingsRepository(db: Kysely<DB>) {
 				awsAccessKeyId: string | null;
 				awsSecretAccessKey: string | null;
 				awsRegion: string | null;
+				jwtSecret: string;
 			}>,
 		) {
 			const updates: Record<string, string | null> = {};
 			if (data.adminEmail !== undefined) updates.admin_email = data.adminEmail;
 			if (data.adminPasswordHash !== undefined) updates.admin_password_hash = data.adminPasswordHash;
+			if (data.jwtSecret !== undefined) updates.jwt_secret = data.jwtSecret;
 			if (data.orgName !== undefined) updates.org_name = data.orgName;
 			if (data.botName !== undefined) updates.bot_name = data.botName;
 			if (data.onboardingCompletedAt !== undefined) updates.onboarding_completed_at = data.onboardingCompletedAt;

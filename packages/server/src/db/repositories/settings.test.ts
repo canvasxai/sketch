@@ -32,6 +32,12 @@ describe("Settings repository", () => {
 		expect(row?.org_name).toBeNull();
 	});
 
+	it("create() auto-generates a jwt_secret", async () => {
+		const row = await settings.create({ adminEmail: "a@b.com", adminPasswordHash: "hash" });
+		expect(row.jwt_secret).toBeTruthy();
+		expect(row.jwt_secret).toHaveLength(64); // 32 bytes hex
+	});
+
 	it("create() rejects duplicate settings row", async () => {
 		await settings.create({ adminEmail: "a@b.com", adminPasswordHash: "hash" });
 		await expect(settings.create({ adminEmail: "c@d.com", adminPasswordHash: "hash2" })).rejects.toThrow();

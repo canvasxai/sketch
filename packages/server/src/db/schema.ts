@@ -42,6 +42,7 @@ export interface SettingsTable {
 	aws_access_key_id: string | null;
 	aws_secret_access_key: string | null;
 	aws_region: string | null;
+	jwt_secret: string | null;
 	onboarding_completed_at: string | null;
 	created_at: Generated<string>;
 	updated_at: Generated<string>;

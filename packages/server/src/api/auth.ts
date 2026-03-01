@@ -1,23 +1,19 @@
 /**
- * Admin auth routes — DB-backed credentials, in-memory session store.
- * Sessions are lost on server restart; admin simply re-logs in.
- * Cookie-based with httpOnly, sameSite=lax, 7-day sliding expiry.
+ * Admin auth routes — DB-backed credentials, JWT session tokens.
+ * JWTs are signed with a per-deployment secret stored in the settings table,
+ * so sessions survive server restarts. Cookie-based with httpOnly, sameSite=lax.
  */
 import { randomBytes } from "node:crypto";
 import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { signJwt, verifyJwt } from "../auth/jwt";
 import { verifyPassword } from "../auth/password";
 import type { createSettingsRepository } from "../db/repositories/settings";
 
-const SESSION_COOKIE = "sketch_session";
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const SESSION_COOKIE = "sketch_session";
+const SESSION_MAX_AGE = 7 * 24 * 60 * 60; // 7 days in seconds
 
-interface Session {
-	email: string;
-	expiresAt: number;
-}
-
-const sessions = new Map<string, Session>();
+type SettingsRepo = ReturnType<typeof createSettingsRepository>;
 
 function isSecure(c: Context): boolean {
 	return new URL(c.req.url).protocol === "https:";
@@ -29,17 +25,13 @@ function setSessionCookie(c: Context, token: string, secure: boolean) {
 		secure,
 		sameSite: "Lax",
 		path: "/",
-		maxAge: SESSION_TTL_MS / 1000,
+		maxAge: SESSION_MAX_AGE,
 	});
 }
 
-type SettingsRepo = ReturnType<typeof createSettingsRepository>;
-
-export function createSession(c: Context, email: string): string {
-	const token = randomBytes(32).toString("hex");
-	sessions.set(token, { email, expiresAt: Date.now() + SESSION_TTL_MS });
+export async function createSession(c: Context, email: string, jwtSecret: string): Promise<void> {
+	const token = await signJwt(email, jwtSecret);
 	setSessionCookie(c, token, isSecure(c));
-	return token;
 }
 
 export function authRoutes(settings: SettingsRepo) {
@@ -63,52 +55,44 @@ export function authRoutes(settings: SettingsRepo) {
 			return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid credentials" } }, 401);
 		}
 
-		createSession(c, row.admin_email);
+		// Backfill jwt_secret for accounts created before the JWT migration
+		let jwtSecret = row.jwt_secret;
+		if (!jwtSecret) {
+			jwtSecret = randomBytes(32).toString("hex");
+			await settings.update({ jwtSecret });
+		}
+
+		await createSession(c, row.admin_email, jwtSecret);
 		return c.json({ authenticated: true, email: row.admin_email });
 	});
 
 	routes.post("/logout", (c) => {
-		const token = getCookie(c, SESSION_COOKIE);
-		if (token) {
-			sessions.delete(token);
-		}
 		deleteCookie(c, SESSION_COOKIE, { path: "/" });
 		return c.json({ authenticated: false });
 	});
 
-	routes.get("/session", (c) => {
+	routes.get("/session", async (c) => {
 		const token = getCookie(c, SESSION_COOKIE);
 		if (!token) {
 			return c.json({ authenticated: false });
 		}
 
-		const session = sessions.get(token);
-		if (!session || session.expiresAt < Date.now()) {
-			if (session) sessions.delete(token);
+		const row = await settings.get();
+		if (!row?.jwt_secret) {
 			deleteCookie(c, SESSION_COOKIE, { path: "/" });
 			return c.json({ authenticated: false });
 		}
 
-		// Sliding renewal
-		session.expiresAt = Date.now() + SESSION_TTL_MS;
-		setSessionCookie(c, token, isSecure(c));
+		const payload = await verifyJwt(token, row.jwt_secret);
+		if (!payload) {
+			deleteCookie(c, SESSION_COOKIE, { path: "/" });
+			return c.json({ authenticated: false });
+		}
 
-		return c.json({ authenticated: true, email: session.email });
+		// Sliding renewal — issue a fresh JWT to extend the session
+		await createSession(c, payload.email, row.jwt_secret);
+		return c.json({ authenticated: true, email: payload.email });
 	});
 
 	return routes;
-}
-
-export function validateSession(token: string): Session | null {
-	const session = sessions.get(token);
-	if (!session || session.expiresAt < Date.now()) {
-		if (session) sessions.delete(token);
-		return null;
-	}
-	return session;
-}
-
-/** Exported for testing — clears all sessions. */
-export function clearSessions() {
-	sessions.clear();
 }

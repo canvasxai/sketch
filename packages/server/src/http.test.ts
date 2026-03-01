@@ -1,6 +1,5 @@
 import type { Kysely } from "kysely";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearSessions } from "./api/auth";
 import { hashPassword } from "./auth/password";
 import { createSettingsRepository } from "./db/repositories/settings";
 import type { DB } from "./db/schema";
@@ -79,7 +78,6 @@ describe("WhatsApp endpoints", () => {
 
 	beforeEach(async () => {
 		db = await createTestDb();
-		clearSessions();
 	});
 
 	afterEach(async () => {
@@ -351,7 +349,6 @@ describe("Slack disconnect endpoint", () => {
 
 	beforeEach(async () => {
 		db = await createTestDb();
-		clearSessions();
 	});
 
 	afterEach(async () => {
@@ -410,7 +407,6 @@ describe("GET /api/channels/status — WhatsApp states", () => {
 
 	beforeEach(async () => {
 		db = await createTestDb();
-		clearSessions();
 	});
 
 	afterEach(async () => {
@@ -493,7 +489,6 @@ describe("Auth endpoints", () => {
 
 	beforeEach(async () => {
 		db = await createTestDb();
-		clearSessions();
 	});
 
 	afterEach(async () => {
@@ -542,6 +537,28 @@ describe("Auth endpoints", () => {
 			expect(res.status).toBe(400);
 		});
 
+		it("backfills jwt_secret and logs in when account predates JWT migration", async () => {
+			const settings = createSettingsRepository(db);
+			const hash = await hashPassword("testpassword123");
+			await db
+				.insertInto("settings")
+				.values({ id: "default", admin_email: "admin@test.com", admin_password_hash: hash })
+				.execute();
+
+			const app = createApp(db, config);
+			const res = await app.request("/api/auth/login", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ email: "admin@test.com", password: "testpassword123" }),
+			});
+			expect(res.status).toBe(200);
+			expect(res.headers.get("set-cookie")).toContain("sketch_session=");
+
+			const row = await settings.get();
+			expect(row?.jwt_secret).toBeTruthy();
+			expect(row?.jwt_secret).toHaveLength(64);
+		});
+
 		it("returns 503 when no admin account exists", async () => {
 			const app = createApp(db, config);
 			const res = await app.request("/api/auth/login", {
@@ -584,7 +601,7 @@ describe("Auth endpoints", () => {
 	});
 
 	describe("POST /api/auth/logout", () => {
-		it("clears session and returns authenticated false", async () => {
+		it("clears cookie and returns authenticated false", async () => {
 			await seedAdmin(db);
 			const settings = createSettingsRepository(db);
 			await settings.update({ onboardingCompletedAt: new Date().toISOString() });
@@ -602,10 +619,11 @@ describe("Auth endpoints", () => {
 				headers: { Cookie: cookie },
 			});
 			expect(logoutRes.status).toBe(200);
+			const logoutBody = await logoutRes.json();
+			expect(logoutBody.authenticated).toBe(false);
 
-			const sessionRes = await app.request("/api/auth/session", {
-				headers: { Cookie: cookie },
-			});
+			// After logout, browser no longer sends the cookie
+			const sessionRes = await app.request("/api/auth/session");
 			const body = await sessionRes.json();
 			expect(body.authenticated).toBe(false);
 		});
@@ -617,7 +635,6 @@ describe("Auth middleware", () => {
 
 	beforeEach(async () => {
 		db = await createTestDb();
-		clearSessions();
 	});
 
 	afterEach(async () => {
@@ -748,7 +765,6 @@ describe("Setup endpoints", () => {
 
 	beforeEach(async () => {
 		db = await createTestDb();
-		clearSessions();
 	});
 
 	afterEach(async () => {
@@ -1279,7 +1295,6 @@ describe("Settings endpoints", () => {
 
 	beforeEach(async () => {
 		db = await createTestDb();
-		clearSessions();
 	});
 
 	afterEach(async () => {

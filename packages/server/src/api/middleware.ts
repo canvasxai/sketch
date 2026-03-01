@@ -8,12 +8,13 @@
  *   routes are accessible, and non-public setup routes require auth.
  *
  * Auth: when an admin account exists, all non-public API routes require
- * a valid session cookie.
+ * a valid JWT session cookie.
  */
 import type { Context, Next } from "hono";
 import { getCookie } from "hono/cookie";
+import { verifyJwt } from "../auth/jwt";
 import type { createSettingsRepository } from "../db/repositories/settings";
-import { validateSession } from "./auth";
+import { SESSION_COOKIE } from "./auth";
 
 const PUBLIC_PATHS = new Set(["/api/auth/login", "/api/auth/session", "/api/health"]);
 const SETUP_PATHS_PREFIX = "/api/setup";
@@ -23,6 +24,8 @@ const ONBOARDING_PATHS_PREFIX = "/api/whatsapp";
 type SettingsRepo = ReturnType<typeof createSettingsRepository>;
 
 export function createAuthMiddleware(settings: SettingsRepo) {
+	let cachedSecret: string | null = null;
+
 	return async (c: Context, next: Next) => {
 		const path = c.req.path;
 		const isSetupPath = path.startsWith(SETUP_PATHS_PREFIX);
@@ -36,10 +39,13 @@ export function createAuthMiddleware(settings: SettingsRepo) {
 
 		let setupComplete = false;
 		let hasAdmin = false;
+		let jwtSecret: string | null = null;
 		try {
 			const row = await settings.get();
 			setupComplete = Boolean(row?.onboarding_completed_at);
 			hasAdmin = Boolean(row?.admin_email);
+			jwtSecret = row?.jwt_secret ?? null;
+			if (jwtSecret) cachedSecret = jwtSecret;
 		} catch {
 			// DB unavailable — let public paths through, block everything else
 		}
@@ -69,13 +75,18 @@ export function createAuthMiddleware(settings: SettingsRepo) {
 			return next();
 		}
 
-		const token = getCookie(c, "sketch_session");
+		const secret = jwtSecret ?? cachedSecret;
+		if (!secret) {
+			return c.json({ error: { code: "UNAUTHORIZED", message: "Authentication required" } }, 401);
+		}
+
+		const token = getCookie(c, SESSION_COOKIE);
 		if (!token) {
 			return c.json({ error: { code: "UNAUTHORIZED", message: "Authentication required" } }, 401);
 		}
 
-		const session = validateSession(token);
-		if (!session) {
+		const payload = await verifyJwt(token, secret);
+		if (!payload) {
 			return c.json({ error: { code: "UNAUTHORIZED", message: "Session expired" } }, 401);
 		}
 
