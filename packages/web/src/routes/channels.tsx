@@ -94,6 +94,8 @@ function PlatformCard({ channel }: { channel: ChannelStatus }) {
 function SlackCard({ channel }: { channel: ChannelStatus }) {
 	const queryClient = useQueryClient();
 	const [showConnectDialog, setShowConnectDialog] = useState(false);
+	const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
+	const [isDisconnecting, setIsDisconnecting] = useState(false);
 
 	const isConfigured = channel.configured;
 	const isConnected = channel.connected === true;
@@ -102,6 +104,20 @@ function SlackCard({ channel }: { channel: ChannelStatus }) {
 		setShowConnectDialog(false);
 		toast.success("Slack connected.");
 		queryClient.invalidateQueries({ queryKey: ["channels", "status"] });
+	};
+
+	const handleDisconnect = async () => {
+		setIsDisconnecting(true);
+		try {
+			await api.channels.disconnectSlack();
+			toast.success("Slack disconnected.");
+			queryClient.invalidateQueries({ queryKey: ["channels", "status"] });
+		} catch {
+			toast.error("Failed to disconnect Slack.");
+		} finally {
+			setIsDisconnecting(false);
+			setShowDisconnectDialog(false);
+		}
 	};
 
 	return (
@@ -130,7 +146,9 @@ function SlackCard({ channel }: { channel: ChannelStatus }) {
 									</Button>
 								</DropdownMenuTrigger>
 								<DropdownMenuContent align="end">
-									<DropdownMenuItem disabled>Disconnect</DropdownMenuItem>
+									<DropdownMenuItem className="text-destructive" onClick={() => setShowDisconnectDialog(true)}>
+										Disconnect
+									</DropdownMenuItem>
 								</DropdownMenuContent>
 							</DropdownMenu>
 						)}
@@ -153,6 +171,24 @@ function SlackCard({ channel }: { channel: ChannelStatus }) {
 			</div>
 
 			<SlackConnectDialog open={showConnectDialog} onOpenChange={setShowConnectDialog} onConnected={handleConnected} />
+
+			<AlertDialog open={showDisconnectDialog} onOpenChange={setShowDisconnectDialog}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Disconnect Slack?</AlertDialogTitle>
+						<AlertDialogDescription>
+							This will disconnect Slack and remove the stored tokens. Users will no longer be able to message the bot
+							via Slack.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel disabled={isDisconnecting}>Cancel</AlertDialogCancel>
+						<AlertDialogAction variant="destructive" onClick={handleDisconnect} disabled={isDisconnecting}>
+							{isDisconnecting ? "Disconnecting..." : "Disconnect"}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</>
 	);
 }

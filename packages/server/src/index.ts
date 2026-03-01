@@ -472,6 +472,14 @@ const app = createApp(db, config, {
 		if (!tokens) return;
 		await startSlackBotIfConfigured(tokens);
 	},
+	onSlackDisconnect: async () => {
+		if (slack) {
+			await slack.stop();
+			slack = null;
+		}
+		await settingsRepo.update({ slackBotToken: null, slackAppToken: null });
+		logger.info("Slack disconnected and tokens cleared");
+	},
 	onLlmSettingsUpdated: async () => {
 		await applyLlmEnvFromDb();
 	},

@@ -115,6 +115,9 @@ export const api = {
 		status() {
 			return request<{ channels: ChannelStatus[] }>("/api/channels/status");
 		},
+		disconnectSlack() {
+			return request<{ success: boolean }>("/api/channels/slack", { method: "DELETE" });
+		},
 	},
 	whatsapp: {
 		status() {

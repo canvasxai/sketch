@@ -5,6 +5,7 @@ import type { WhatsAppBot } from "../whatsapp/bot";
 interface ChannelDeps {
 	whatsapp?: WhatsAppBot;
 	getSlack?: () => SlackBot | null;
+	onSlackDisconnect?: () => Promise<void>;
 }
 
 export function channelRoutes(deps: ChannelDeps) {
@@ -30,6 +31,15 @@ export function channelRoutes(deps: ChannelDeps) {
 		];
 
 		return c.json({ channels });
+	});
+
+	routes.delete("/slack", async (c) => {
+		const slackBot = deps.getSlack?.() ?? null;
+		if (!slackBot) {
+			return c.json({ error: { code: "NOT_CONFIGURED", message: "Slack is not configured" } }, 400);
+		}
+		await deps.onSlackDisconnect?.();
+		return c.json({ success: true });
 	});
 
 	return routes;

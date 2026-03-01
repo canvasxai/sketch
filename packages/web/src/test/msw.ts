@@ -88,6 +88,10 @@ export const handlers = [
 		return HttpResponse.json({ success: true });
 	}),
 
+	http.delete("/api/channels/slack", () => {
+		return HttpResponse.json({ success: true });
+	}),
+
 	http.get("/api/channels/status", () => {
 		return HttpResponse.json({
 			channels: [

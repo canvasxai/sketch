@@ -347,6 +347,65 @@ describe("WhatsApp endpoints", () => {
 	});
 });
 
+describe("Slack disconnect endpoint", () => {
+	let db: Kysely<DB>;
+
+	beforeEach(async () => {
+		db = await createTestDb();
+		clearSessions();
+	});
+
+	afterEach(async () => {
+		try {
+			await db.destroy();
+		} catch {}
+	});
+
+	/** Login and return the session cookie string. */
+	async function loginAdmin(app: ReturnType<typeof createApp>) {
+		const res = await app.request("/api/auth/login", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ email: "admin@test.com", password: "testpassword123" }),
+		});
+		return res.headers.get("set-cookie") ?? "";
+	}
+
+	it("returns 400 when Slack is not configured", async () => {
+		await seedAdmin(db);
+		const settings = createSettingsRepository(db);
+		await settings.update({ onboardingCompletedAt: new Date().toISOString() });
+		const app = createApp(db, config, { getSlack: () => null });
+		const cookie = await loginAdmin(app);
+
+		const res = await app.request("/api/channels/slack", { method: "DELETE", headers: { Cookie: cookie } });
+		expect(res.status).toBe(400);
+
+		const body = await res.json();
+		expect(body.error.code).toBe("NOT_CONFIGURED");
+	});
+
+	it("disconnects successfully when Slack is configured", async () => {
+		await seedAdmin(db);
+		const settings = createSettingsRepository(db);
+		await settings.update({ onboardingCompletedAt: new Date().toISOString() });
+		const disconnectFn = vi.fn();
+		const fakeSlack = { stop: vi.fn() } as unknown as import("./slack/bot").SlackBot;
+		const app = createApp(db, config, {
+			getSlack: () => fakeSlack,
+			onSlackDisconnect: disconnectFn,
+		});
+		const cookie = await loginAdmin(app);
+
+		const res = await app.request("/api/channels/slack", { method: "DELETE", headers: { Cookie: cookie } });
+		expect(res.status).toBe(200);
+
+		const body = await res.json();
+		expect(body.success).toBe(true);
+		expect(disconnectFn).toHaveBeenCalled();
+	});
+});
+
 describe("Auth endpoints", () => {
 	let db: Kysely<DB>;
 

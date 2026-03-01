@@ -24,6 +24,7 @@ interface AppDeps {
 	whatsapp?: WhatsAppBot;
 	getSlack?: () => SlackBot | null;
 	onSlackTokensUpdated?: (tokens?: { botToken: string; appToken: string }) => Promise<void>;
+	onSlackDisconnect?: () => Promise<void>;
 	onLlmSettingsUpdated?: () => Promise<void>;
 }
 
@@ -45,7 +46,10 @@ export function createApp(db: Kysely<DB>, _config: Config, deps?: AppDeps) {
 		}),
 	);
 	app.route("/api/settings", settingsRoutes(settings));
-	app.route("/api/channels", channelRoutes({ whatsapp: deps?.whatsapp, getSlack: deps?.getSlack }));
+	app.route(
+		"/api/channels",
+		channelRoutes({ whatsapp: deps?.whatsapp, getSlack: deps?.getSlack, onSlackDisconnect: deps?.onSlackDisconnect }),
+	);
 
 	if (deps?.whatsapp) {
 		app.route("/api/whatsapp", whatsappRoutes(deps.whatsapp));
