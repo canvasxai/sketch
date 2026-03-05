@@ -134,7 +134,8 @@
 
 @layer components {
   .markdown-body {
-    @apply text-sm leading-relaxed space-y-2;
+    @apply text-sm leading-relaxed space-y-2 break-words;
+    overflow-wrap: anywhere;
   }
 
   .markdown-body h1 {
@@ -167,5 +168,26 @@
 
   .markdown-body code {
     @apply rounded bg-muted px-1 py-0.5 text-xs font-mono;
+  }
+
+  .markdown-body a {
+    @apply break-words;
+  }
+
+  .markdown-body pre {
+    @apply max-w-full overflow-x-auto rounded bg-muted p-3;
+  }
+
+  .markdown-body pre code {
+    @apply bg-transparent p-0;
+    white-space: pre;
+  }
+
+  .markdown-body table {
+    @apply block max-w-full overflow-x-auto;
+  }
+
+  .markdown-body img {
+    @apply max-w-full;
   }
 }

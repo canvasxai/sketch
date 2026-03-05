@@ -49,6 +49,14 @@ export interface Skill {
   createdAt: Date;
 }
 
+export interface ApiSkill {
+  id: string;
+  name: string;
+  description: string;
+  body: string;
+  category: SkillCategory;
+}
+
 // ── Category Definitions ───────────────────────────────────
 
 export const skillCategories: {
@@ -432,6 +440,22 @@ When asked about competitor pricing.
 ];
 
 // ── Utilities ──────────────────────────────────────────────
+
+export function fromApiSkill(s: ApiSkill): Skill {
+  return {
+    id: s.id,
+    name: s.name,
+    description: s.description,
+    body: s.body,
+    category: s.category,
+    status: { org: true, channels: [], individuals: [] },
+    iconBg: categoryMeta[s.category].iconBg,
+    iconEmoji: categoryMeta[s.category].iconEmoji,
+    source: undefined,
+    lastUsedAt: null,
+    createdAt: new Date(),
+  };
+}
 
 export function formatRelativeTime(date: Date): string {
   const now = Date.now();

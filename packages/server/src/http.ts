@@ -13,6 +13,7 @@ import { healthRoutes } from "./api/health";
 import { createAuthMiddleware } from "./api/middleware";
 import { settingsRoutes } from "./api/settings";
 import { setupRoutes } from "./api/setup";
+import { skillsRoutes } from "./api/skills";
 import { userRoutes } from "./api/users";
 import { whatsappRoutes } from "./api/whatsapp";
 import type { Config } from "./config";
@@ -49,6 +50,7 @@ export function createApp(db: Kysely<DB>, _config: Config, deps?: AppDeps) {
     }),
   );
   app.route("/api/settings", settingsRoutes(settings));
+  app.route("/api/skills", skillsRoutes());
   app.route("/api/users", userRoutes(users));
   app.route(
     "/api/channels",

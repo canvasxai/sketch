@@ -8,10 +8,12 @@ import { SkillsFilterBar } from "@/components/skills/skills-filter-bar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  type ApiSkill,
   CURRENT_USER_ID,
   type Skill,
   type SkillCategory,
   categoryMeta,
+  fromApiSkill,
   getCategoryLabel,
   getSkillSourcesForUser,
   isSkillActiveForUser,
@@ -20,6 +22,7 @@ import {
 } from "@/lib/skills-data";
 import { cn } from "@/lib/utils";
 import { PlusIcon } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
 import { createRoute } from "@tanstack/react-router";
 /**
  * Skills page — create, manage, and configure skills (custom agent behaviors).
@@ -48,7 +51,6 @@ export function SkillsPage() {
   const [mode, setMode] = useState<PageMode>("listing");
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [skills, setSkills] = useState<Skill[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategories, setActiveCategories] = useState<SkillCategory[]>([]);
   const [activeTab, setActiveTab] = useState<"details" | "permissions">("details");
@@ -62,14 +64,26 @@ export function SkillsPage() {
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [skillToDelete, setSkillToDelete] = useState<Skill | null>(null);
 
-  // ── Simulated load ─────────────────────────────────────────
+  const skillsQuery = useQuery({
+    queryKey: ["skills"],
+    queryFn: async () => {
+      const res = await fetch("/api/skills");
+      if (!res.ok) throw new Error(`Failed to load skills (${res.status})`);
+      return (await res.json()) as { skills: ApiSkill[] };
+    },
+  });
+
+  // Hydrate the local editable state once.
   useEffect(() => {
-    const timer = setTimeout(() => {
+    if (skills.length > 0) return;
+    if (skillsQuery.data?.skills) {
+      setSkills(skillsQuery.data.skills.map(fromApiSkill));
+      return;
+    }
+    if (skillsQuery.isError) {
       setSkills(mockSkills);
-      setLoading(false);
-    }, 600);
-    return () => clearTimeout(timer);
-  }, []);
+    }
+  }, [skills.length, skillsQuery.data, skillsQuery.isError]);
 
   // ── Derived data ──────────────────────────────────────────
   const isAdmin = true;
@@ -267,7 +281,7 @@ export function SkillsPage() {
   }, []);
 
   // ── Loading skeleton ───────────────────────────────────────
-  if (loading) {
+  if (skillsQuery.isLoading && skills.length === 0) {
     return (
       <div className="mx-auto max-w-4xl px-10 py-8">
         <div className="flex items-start justify-between">
