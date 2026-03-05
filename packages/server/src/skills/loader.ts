@@ -1,7 +1,27 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-export type LoadedSkillCategory = "crm" | "comms" | "research" | "ops" | "productivity";
+export type LoadedSkillCategory =
+  | "crm"
+  | "comms"
+  | "research"
+  | "ops"
+  | "productivity"
+  | "sales"
+  | "marketing"
+  | "finance"
+  | "hr"
+  | "engineering"
+  | "design"
+  | "analytics"
+  | "security"
+  | "legal"
+  | "support"
+  | "onboarding"
+  | "reporting"
+  | "integrations"
+  | "ai"
+  | "workflows";
 
 export interface LoadedSkill {
   id: string;
@@ -18,7 +38,28 @@ interface FrontMatter {
 }
 
 function isLoadedCategory(value: string): value is LoadedSkillCategory {
-  return value === "crm" || value === "comms" || value === "research" || value === "ops" || value === "productivity";
+  return (
+    value === "crm" ||
+    value === "comms" ||
+    value === "research" ||
+    value === "ops" ||
+    value === "productivity" ||
+    value === "sales" ||
+    value === "marketing" ||
+    value === "finance" ||
+    value === "hr" ||
+    value === "engineering" ||
+    value === "design" ||
+    value === "analytics" ||
+    value === "security" ||
+    value === "legal" ||
+    value === "support" ||
+    value === "onboarding" ||
+    value === "reporting" ||
+    value === "integrations" ||
+    value === "ai" ||
+    value === "workflows"
+  );
 }
 
 export function parseFrontMatter(md: string): { frontMatter: FrontMatter; body: string } {
@@ -55,7 +96,7 @@ export function inferNameFromBody(body: string): string | null {
 }
 
 /**
- * Loads project skills from `{repoRoot}/.claude/skills/<skill>/SKILL.MD`.
+ * Core loader for Claude skills under a given skills root directory.
  *
  * Notes:
  * - Each skill is a folder; folder name becomes the skill `id`.
@@ -63,9 +104,7 @@ export function inferNameFromBody(body: string): string | null {
  * - If frontmatter is missing, `name` defaults to the folder name and
  *   `description` is empty.
  */
-export function loadProjectClaudeSkills(repoRoot: string): LoadedSkill[] {
-  const dir = join(repoRoot, ".claude", "skills");
-
+export function loadClaudeSkillsFromDir(dir: string): LoadedSkill[] {
   let entries: string[] = [];
   try {
     entries = readdirSync(dir);
@@ -105,4 +144,15 @@ export function loadProjectClaudeSkills(repoRoot: string): LoadedSkill[] {
   }
 
   return out;
+}
+
+/**
+ * Loads project skills from `{repoRoot}/.claude/skills/<skill>/SKILL.MD`.
+ *
+ * This is a thin wrapper around `loadClaudeSkillsFromDir` that preserves the
+ * previous API used in tests and any legacy callers.
+ */
+export function loadProjectClaudeSkills(repoRoot: string): LoadedSkill[] {
+  const dir = join(repoRoot, ".claude", "skills");
+  return loadClaudeSkillsFromDir(dir);
 }

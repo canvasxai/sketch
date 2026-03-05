@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { inferNameFromBody, loadProjectClaudeSkills, parseFrontMatter } from "./loader";
+import { inferNameFromBody, loadClaudeSkillsFromDir, loadProjectClaudeSkills, parseFrontMatter } from "./loader";
 
 describe("parseFrontMatter", () => {
   it("returns empty frontmatter when no frontmatter present", () => {
@@ -281,5 +281,53 @@ More content`;
     const result = loadProjectClaudeSkills(tempDir);
     expect(result[0].body).toContain("## Section 1");
     expect(result[0].body).toContain("Content here");
+  });
+});
+
+describe("loadClaudeSkillsFromDir", () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = (await mkdir(join(tmpdir(), `sketch-skills-root-test-${Date.now()}`), {
+      recursive: true,
+    })) as string;
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  async function writeSkillAtRoot(skillId: string, content: string) {
+    const skillDir = join(tempDir, skillId);
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(join(skillDir, "SKILL.MD"), content, "utf-8");
+  }
+
+  it("returns empty array when directory does not exist", () => {
+    const result = loadClaudeSkillsFromDir(join(tempDir, "missing"));
+    expect(result).toEqual([]);
+  });
+
+  it("loads skills directly from a skills root directory", async () => {
+    await writeSkillAtRoot(
+      "root-skill",
+      "---\nname: Root Skill\ndescription: From root\ncategory: ops\n---\nBody from root",
+    );
+
+    const result = loadClaudeSkillsFromDir(tempDir);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: "root-skill",
+      name: "Root Skill",
+      description: "From root",
+      category: "ops",
+      body: "Body from root",
+    });
+  });
+
+  it("skips entries that are not directories at root level", async () => {
+    await writeFile(join(tempDir, "README.md"), "not a skill", "utf-8");
+    const result = loadClaudeSkillsFromDir(tempDir);
+    expect(result).toEqual([]);
   });
 });
