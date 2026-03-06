@@ -1,6 +1,5 @@
 import { ChannelPlatformIcon } from "@/components/skills/channel-platform-icon";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,11 +47,6 @@ export function SkillDetailView({
   isExplorePreview = false,
   onAddSkill,
 }: SkillDetailViewProps) {
-  const [overflowPopup, setOverflowPopup] = useState<{
-    type: "channels" | "individuals";
-    items: { name: string }[];
-  } | null>(null);
-
   const enabled = isSkillEnabled(skill.status);
   const activeChannels = getActiveChannels(skill.status);
   const activeIndividuals = getActiveIndividuals(skill.status);
@@ -161,7 +155,6 @@ export function SkillDetailView({
                   enabled={enabled}
                   activeChannels={activeChannels}
                   activeIndividuals={activeIndividuals}
-                  onOverflowClick={setOverflowPopup}
                 />
               ) : (
                 <MemberStatusLabel enabled={enabled} />
@@ -170,40 +163,6 @@ export function SkillDetailView({
           )}
         </div>
       )}
-
-      {/* Overflow Popup */}
-      <Dialog
-        open={overflowPopup !== null}
-        onOpenChange={(open) => {
-          if (!open) setOverflowPopup(null);
-        }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-base font-semibold">{skill.name}</DialogTitle>
-            <p className="text-sm text-muted-foreground">Enabled for</p>
-          </DialogHeader>
-          {overflowPopup && (
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                {overflowPopup.type === "channels" ? "Channels" : "Individuals"} ({overflowPopup.items.length})
-              </p>
-              <div className="max-h-60 overflow-y-auto space-y-1">
-                {overflowPopup.items.map((item) => (
-                  <div key={item.name} className="text-sm py-1.5 px-1">
-                    {overflowPopup.type === "channels" ? (
-                      <MessageCircle size={14} strokeWidth={1.75} className="inline mr-1.5 text-muted-foreground" />
-                    ) : (
-                      <User size={14} strokeWidth={1.75} className="inline mr-1.5 text-muted-foreground" />
-                    )}
-                    {item.name}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -269,7 +228,6 @@ function AdminPermissionsView({
   enabled: boolean;
   activeChannels: { id: string; name: string; enabled: boolean }[];
   activeIndividuals: { name: string }[];
-  onOverflowClick: (popup: { type: "channels" | "individuals"; items: { name: string }[] }) => void;
 }) {
   const [channelsOpen, setChannelsOpen] = useState(true);
   const [individualsOpen, setIndividualsOpen] = useState(true);
@@ -388,6 +346,7 @@ function AdminPermissionsView({
                               </span>
                             )}
                           </div>
+                          {/* TODO: Render expanded channel details once nested permission data is available. */}
                           {expandedChannels.has(ch.id) && null}
                         </div>
                       );

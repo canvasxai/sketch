@@ -167,6 +167,8 @@ export function SkillsPage() {
   // ── Derived data ──────────────────────────────────────────
   const isAdmin = true;
 
+  // TODO: Switch the active tab to per-user visibility once viewer identity is available
+  // by using `isSkillActiveForUser` and `getSkillSourcesForUser`.
   const totalActiveCount = useMemo(() => skills.filter((s) => isSkillEnabled(s.status)).length, [skills]);
 
   const activeSkills = useMemo(() => {
@@ -398,7 +400,6 @@ export function SkillsPage() {
           onBack={handleCancelEdit}
           onSave={handleSave}
           onCancel={handleCancelEdit}
-          isAddingFromExplore={viewOrigin === "explore" && mode === "edit"}
         />
         <DiscardChangesDialog
           open={discardDialogOpen}
@@ -484,19 +485,15 @@ export function SkillsPage() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {displayedSkills.map((skill) => {
-              const sourceTags = undefined;
-              return (
-                <SkillCard
-                  key={skill.id}
-                  skill={skill}
-                  sourceTags={sourceTags}
-                  onCardClick={handleCardClick}
-                  onDuplicate={handleDuplicate}
-                  onDelete={handleDeleteClick}
-                />
-              );
-            })}
+            {displayedSkills.map((skill) => (
+              <SkillCard
+                key={skill.id}
+                skill={skill}
+                onCardClick={handleCardClick}
+                onDuplicate={handleDuplicate}
+                onDelete={handleDeleteClick}
+              />
+            ))}
           </div>
         )}
       </div>

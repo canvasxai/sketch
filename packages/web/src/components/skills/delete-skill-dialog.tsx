@@ -25,7 +25,7 @@ export function DeleteSkillDialog({ open, onOpenChange, skillName, onConfirm }: 
             This skill will be permanently removed. This can&apos;t be undone.
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="gap-2 sm:gap-2">
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

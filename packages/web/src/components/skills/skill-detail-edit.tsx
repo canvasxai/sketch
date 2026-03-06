@@ -46,7 +46,6 @@ interface SkillDetailEditProps {
   onBack: () => void;
   onSave: (draft: SkillDraft) => Promise<void>;
   onCancel: () => void;
-  isAddingFromExplore?: boolean;
 }
 
 export function SkillDetailEdit({ skill, activeTab, onTabChange, onBack, onSave, onCancel }: SkillDetailEditProps) {
@@ -145,9 +144,9 @@ export function SkillDetailEdit({ skill, activeTab, onTabChange, onBack, onSave,
     });
   }, []);
 
-  const addedChannelIds = new Set(channels.map((c) => c.id));
-  const addedIndividualIds = new Set(individuals.map((i) => i.id));
+  // TODO: Populate from the org's available channels and exclude ones already added to the skill.
   const unaddedChannels: SkillChannelEntry[] = [];
+  // TODO: Populate from the org's available individuals and exclude ones already added to the skill.
   const unaddedIndividuals: SkillIndividualEntry[] = [];
 
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -419,6 +418,7 @@ export function SkillDetailEdit({ skill, activeTab, onTabChange, onBack, onSave,
                                 <XIcon size={12} />
                               </button>
                             </div>
+                            {/* TODO: Render expanded channel details once nested permission data is available. */}
                             {expandedChannels.has(ch.id) && null}
                           </div>
                         ));

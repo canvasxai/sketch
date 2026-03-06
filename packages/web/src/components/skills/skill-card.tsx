@@ -6,8 +6,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { Skill, SkillSourceTag } from "@/lib/skills-data";
+import type { Skill } from "@/lib/skills-data";
 import { getCategoryLabel } from "@/lib/skills-data";
 import { cn } from "@/lib/utils";
 import { DotsThreeIcon } from "@phosphor-icons/react";
@@ -15,47 +14,12 @@ import { Download, Star, Store } from "lucide-react";
 
 interface SkillCardProps {
   skill: Skill;
-  sourceTags?: SkillSourceTag[];
   onCardClick: (skillId: string) => void;
   onDuplicate: (skill: Skill) => void;
   onDelete: (skill: Skill) => void;
 }
 
-function SourceTagPills({ tags }: { tags: SkillSourceTag[] }) {
-  const visible = tags.slice(0, 1);
-  const overflow = tags.length - 1;
-
-  return (
-    <>
-      {visible.map((tag) => (
-        <span
-          key={tag.label}
-          className="inline-flex shrink-0 items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
-        >
-          {tag.label}
-        </span>
-      ))}
-      {overflow > 0 && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="inline-flex shrink-0 cursor-default items-center rounded-full bg-muted/50 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground/60">
-              +{overflow}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" align="start" sideOffset={4}>
-            <div className="flex flex-col gap-0.5">
-              {tags.slice(1).map((t) => (
-                <span key={t.label}>{t.label}</span>
-              ))}
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      )}
-    </>
-  );
-}
-
-export function SkillCard({ skill, sourceTags, onCardClick, onDuplicate, onDelete }: SkillCardProps) {
+export function SkillCard({ skill, onCardClick, onDuplicate, onDelete }: SkillCardProps) {
   return (
     <button
       type="button"
@@ -74,7 +38,6 @@ export function SkillCard({ skill, sourceTags, onCardClick, onDuplicate, onDelet
           <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
             {getCategoryLabel(skill.category)}
           </span>
-          {sourceTags && sourceTags.length > 0 && <SourceTagPills tags={sourceTags} />}
         </div>
 
         <DropdownMenu>
