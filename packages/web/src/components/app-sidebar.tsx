@@ -79,11 +79,11 @@ export function AppSidebar({ email }: { email: string }) {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="px-3 py-4">
+      <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" className="pointer-events-none">
-              <div className="flex size-7 items-center justify-center rounded-md bg-primary">
+              <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary">
                 <SparkleIcon size={14} weight="fill" className="text-primary-foreground" />
               </div>
               <div className="flex flex-col text-left group-data-[collapsible=icon]:hidden">

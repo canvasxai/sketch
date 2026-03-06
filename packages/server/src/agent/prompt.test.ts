@@ -249,6 +249,114 @@ describe("buildSystemContext", () => {
     });
   });
 
+  describe("allowedSkillDescriptions", () => {
+    it("omits skills section when allowedSkillDescriptions is undefined", () => {
+      const result = buildSystemContext({
+        platform: "slack",
+        userName: "Alice",
+        workspaceDir: "/data/workspaces/u123",
+      });
+      expect(result).not.toContain("## Skills");
+    });
+
+    it("omits skills section when allowedSkillDescriptions is null", () => {
+      const result = buildSystemContext({
+        platform: "slack",
+        userName: "Alice",
+        workspaceDir: "/data/workspaces/u123",
+        allowedSkillDescriptions: null,
+      });
+      expect(result).not.toContain("## Skills");
+    });
+
+    it("includes no-skills message when allowedSkillDescriptions is empty", () => {
+      const result = buildSystemContext({
+        platform: "slack",
+        userName: "Alice",
+        workspaceDir: "/data/workspaces/u123",
+        allowedSkillDescriptions: [],
+      });
+      expect(result).toContain("## Skills");
+      expect(result).toContain("NO skills enabled");
+      expect(result).toContain("Do not use the Skill tool");
+    });
+
+    it("lists each skill with name and body", () => {
+      const result = buildSystemContext({
+        platform: "slack",
+        userName: "Alice",
+        workspaceDir: "/data/workspaces/u123",
+        allowedSkillDescriptions: [
+          { name: "Canvas", body: "Interact with Canvas AI" },
+          { name: "CRM", body: "Manage CRM leads" },
+        ],
+      });
+      expect(result).toContain("## Skills");
+      expect(result).toContain("### Canvas");
+      expect(result).toContain("Interact with Canvas AI");
+      expect(result).toContain("### CRM");
+      expect(result).toContain("Manage CRM leads");
+    });
+
+    it("includes restriction warning when skills are listed", () => {
+      const result = buildSystemContext({
+        platform: "slack",
+        userName: "Alice",
+        workspaceDir: "/data/workspaces/u123",
+        allowedSkillDescriptions: [{ name: "Canvas", body: "desc" }],
+      });
+      expect(result).toContain("These are ALL the skills available to you");
+      expect(result).toContain("Do NOT use or mention any skills not listed above");
+    });
+
+    it("skips body line when skill body is empty", () => {
+      const result = buildSystemContext({
+        platform: "slack",
+        userName: "Alice",
+        workspaceDir: "/data/workspaces/u123",
+        allowedSkillDescriptions: [{ name: "Canvas", body: "" }],
+      });
+      expect(result).toContain("### Canvas");
+      // The line after "### Canvas" should be blank (next section), not an empty body line
+      const lines = result.split("\n");
+      const headerIdx = lines.indexOf("### Canvas");
+      expect(lines[headerIdx + 1]).toBe("");
+    });
+  });
+
+  describe("claudeMdContents", () => {
+    it("omits CLAUDE.md section when claudeMdContents is undefined", () => {
+      const result = buildSystemContext({
+        platform: "slack",
+        userName: "Alice",
+        workspaceDir: "/data/workspaces/u123",
+      });
+      expect(result).not.toContain("Loaded CLAUDE.md Instructions");
+    });
+
+    it("omits CLAUDE.md section when claudeMdContents is empty", () => {
+      const result = buildSystemContext({
+        platform: "slack",
+        userName: "Alice",
+        workspaceDir: "/data/workspaces/u123",
+        claudeMdContents: [],
+      });
+      expect(result).not.toContain("Loaded CLAUDE.md Instructions");
+    });
+
+    it("includes CLAUDE.md contents when provided", () => {
+      const result = buildSystemContext({
+        platform: "slack",
+        userName: "Alice",
+        workspaceDir: "/data/workspaces/u123",
+        claudeMdContents: ["Always use TypeScript", "Prefer pnpm over npm"],
+      });
+      expect(result).toContain("## Loaded CLAUDE.md Instructions");
+      expect(result).toContain("Always use TypeScript");
+      expect(result).toContain("Prefer pnpm over npm");
+    });
+  });
+
   describe("group context without description", () => {
     const result = buildSystemContext({
       platform: "whatsapp",

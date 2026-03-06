@@ -4,6 +4,7 @@ import { applyLlmEnvFromSettings } from "./agent/llm-env";
 import { formatBufferedContext } from "./agent/prompt";
 import { runAgent } from "./agent/runner";
 import { getSessionId } from "./agent/sessions";
+import { parseAllowedSkills } from "./agent/skill-permissions";
 import { ensureChannelWorkspace, ensureGroupWorkspace, ensureWorkspace } from "./agent/workspace";
 import { loadConfig, validateConfig } from "./config";
 import { createDatabase } from "./db/index";
@@ -11,6 +12,7 @@ import { runMigrations } from "./db/migrate";
 import { createChannelRepository } from "./db/repositories/channels";
 import { createSettingsRepository } from "./db/repositories/settings";
 import { createUserRepository } from "./db/repositories/users";
+import { createWaGroupRepository } from "./db/repositories/wa-groups";
 import { type Attachment, downloadSlackFile, downloadWhatsAppMedia, extensionToMime } from "./files";
 import { createApp } from "./http";
 import { createLogger } from "./logger";
@@ -41,6 +43,7 @@ logger.info("Database ready");
 // 4. Repositories
 const users = createUserRepository(db);
 const channels = createChannelRepository(db);
+const waGroups = createWaGroupRepository(db);
 const settingsRepo = createSettingsRepository(db);
 
 async function applyLlmEnvFromDb() {
@@ -148,6 +151,7 @@ function createConfiguredSlackBot(tokens: { botToken: string; appToken: string }
           orgName: settingsRow?.org_name,
           botName: settingsRow?.bot_name,
           attachments: attachments.length > 0 ? attachments : undefined,
+          allowedSkills: parseAllowedSkills(user.allowed_skills),
         });
 
         for (const filePath of result.pendingUploads) {
@@ -330,6 +334,7 @@ function createConfiguredSlackBot(tokens: { botToken: string; appToken: string }
           channelContext: {
             channelName: channel.name,
           },
+          allowedSkills: parseAllowedSkills(channel.allowed_skills),
         });
 
         for (const filePath of result.pendingUploads) {
@@ -428,6 +433,7 @@ whatsapp.onMessage(async (message) => {
           orgName: settingsRow?.org_name,
           botName: settingsRow?.bot_name,
           attachments: attachments.length > 0 ? attachments : undefined,
+          allowedSkills: parseAllowedSkills(user.allowed_skills),
         });
 
         for (const filePath of result.pendingUploads) {
@@ -473,6 +479,8 @@ whatsapp.onMessage(async (message) => {
     const groupMeta = await whatsapp.getGroupMetadata(groupJid);
     const groupName = groupMeta?.subject ?? "Unknown Group";
     const groupDescription = groupMeta?.desc ?? undefined;
+
+    const waGroup = await waGroups.upsert({ groupJid, name: groupName });
 
     whatsapp.startComposing(groupJid);
 
@@ -524,6 +532,7 @@ whatsapp.onMessage(async (message) => {
         botName: settingsRow?.bot_name,
         attachments: attachments.length > 0 ? attachments : undefined,
         groupContext: { groupName, groupDescription },
+        allowedSkills: parseAllowedSkills(waGroup.allowed_skills),
       });
 
       for (const filePath of result.pendingUploads) {

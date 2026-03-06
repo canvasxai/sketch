@@ -7,11 +7,14 @@
  * canUseTool grants read-only file access and Bash execution for ~/.claude paths
  * so skills can be loaded and their companion CLIs executed.
  */
-import { resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import { type SDKUserMessage, query } from "@anthropic-ai/claude-agent-sdk";
 import type { Attachment } from "../files";
 import { buildMultimodalContent, formatAttachmentsForPrompt, isImageAttachment } from "../files";
 import type { Logger } from "../logger";
+import { loadClaudeSkillsFromDirAsync } from "../skills/loader";
 import { createCanUseTool } from "./permissions";
 import { buildSystemContext } from "./prompt";
 import { getSessionId, saveSessionId } from "./sessions";
@@ -42,6 +45,7 @@ export interface RunAgentParams {
     groupName: string;
     groupDescription?: string;
   };
+  allowedSkills?: string[] | null;
 }
 
 /**
@@ -74,6 +78,42 @@ export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
   const existingSessionId = await getSessionId(workspaceDir, params.threadTs);
   const absWorkspace = resolve(workspaceDir);
 
+  const hasSkillRestrictions = params.allowedSkills !== undefined && params.allowedSkills !== null;
+  let allowedSkillDescriptions: { name: string; body: string }[] | null = null;
+  let claudeMdContents: string[] | undefined;
+
+  if (hasSkillRestrictions) {
+    const orgSkillsDir = join(homedir(), ".claude", "skills");
+    const orgSkills = await loadClaudeSkillsFromDirAsync(orgSkillsDir);
+    const skillMap = new Map(orgSkills.map((s) => [s.id, s]));
+    allowedSkillDescriptions = (params.allowedSkills as string[]).map((id) => {
+      const skill = skillMap.get(id);
+      return { name: skill?.name ?? id, body: skill?.body ?? "" };
+    });
+
+    // With settingSources: [], the SDK won't auto-load CLAUDE.md files.
+    // Read them ourselves so the agent still has org + workspace memory.
+    claudeMdContents = [];
+    for (const mdPath of [join(homedir(), ".claude", "CLAUDE.md"), join(absWorkspace, "CLAUDE.md")]) {
+      try {
+        const content = (await readFile(mdPath, "utf-8")).trim();
+        if (content) claudeMdContents.push(content);
+      } catch {}
+    }
+
+    logger.info(
+      {
+        allowedSkillIds: params.allowedSkills,
+        allowedSkillNames: allowedSkillDescriptions.map((s) => s.name),
+        orgSkillCount: orgSkills.length,
+        claudeMdCount: claudeMdContents.length,
+      },
+      "Skill permissions resolved — using settingSources:[] to prevent SDK skill auto-discovery",
+    );
+  } else {
+    logger.info({ allowedSkills: params.allowedSkills }, "No skill restrictions (all skills allowed)");
+  }
+
   const systemAppend = buildSystemContext({
     platform: params.platform,
     userName,
@@ -82,6 +122,8 @@ export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
     botName: params.botName,
     channelContext: params.channelContext,
     groupContext: params.groupContext,
+    allowedSkillDescriptions,
+    claudeMdContents,
   });
 
   let sessionId = "";
@@ -137,12 +179,16 @@ export async function runAgent(params: RunAgentParams): Promise<AgentResult> {
       },
       permissionMode: "default" as const,
       allowDangerouslySkipPermissions: false,
-      settingSources: ["project", "user"],
+      settingSources: hasSkillRestrictions ? [] : ["project", "user"],
       mcpServers: { sketch: uploadServer },
       stderr: (data) => {
         logger.debug({ stderr: data.trim() }, "Agent subprocess");
       },
-      canUseTool: createCanUseTool(absWorkspace, logger),
+      canUseTool: createCanUseTool({
+        absWorkspace,
+        logger,
+        allowedSkills: params.allowedSkills,
+      }),
     },
   });
 

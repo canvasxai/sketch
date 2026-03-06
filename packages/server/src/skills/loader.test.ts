@@ -191,6 +191,7 @@ describe("loadProjectClaudeSkills", () => {
       name: "Test Skill",
       description: "A test skill",
       category: "crm",
+      org_enabled: true,
       body: "Skill body content",
     });
   });

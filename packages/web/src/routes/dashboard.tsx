@@ -41,7 +41,7 @@ function DashboardLayout() {
       <AppSidebar email={auth.email ?? "admin"} />
       <SidebarInset>
         <SidebarTrigger className="absolute left-3 top-3 z-20" />
-        <main className="flex-1 overflow-auto pt-10">
+        <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden pt-10">
           <Outlet />
         </main>
       </SidebarInset>

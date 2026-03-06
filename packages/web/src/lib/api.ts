@@ -15,6 +15,24 @@ export interface User {
   email: string | null;
   slack_user_id: string | null;
   whatsapp_number: string | null;
+  allowed_skills: string[] | null;
+  created_at: string;
+}
+
+export interface SlackChannel {
+  id: string;
+  slack_channel_id: string;
+  name: string;
+  type: string;
+  allowed_skills: string[] | null;
+  created_at: string;
+}
+
+export interface WaGroup {
+  id: string;
+  group_jid: string;
+  name: string;
+  allowed_skills: string[] | null;
   created_at: string;
 }
 
@@ -59,6 +77,7 @@ export interface SkillRecord {
   description: string;
   category: SkillCategory;
   body: string;
+  org_enabled: boolean;
 }
 
 export const api = {
@@ -137,6 +156,24 @@ export const api = {
     disconnectSlack() {
       return request<{ success: boolean }>("/api/channels/slack", { method: "DELETE" });
     },
+    listSlackChannels() {
+      return request<{ channels: SlackChannel[] }>("/api/channels/slack/list");
+    },
+    updateSlackChannelSkills(id: string, allowedSkills: string[] | null) {
+      return request<{ channel: SlackChannel }>(`/api/channels/slack/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ allowed_skills: allowedSkills }),
+      });
+    },
+    listWaGroups() {
+      return request<{ groups: WaGroup[] }>("/api/channels/whatsapp/groups");
+    },
+    updateWaGroupSkills(id: string, allowedSkills: string[] | null) {
+      return request<{ group: WaGroup }>(`/api/channels/whatsapp/groups/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ allowed_skills: allowedSkills }),
+      });
+    },
   },
   whatsapp: {
     status() {
@@ -175,6 +212,12 @@ export const api = {
         method: "DELETE",
       });
     },
+    updateSkills(id: string, allowedSkills: string[] | null) {
+      return request<{ user: User }>(`/api/users/${id}/skills`, {
+        method: "PATCH",
+        body: JSON.stringify({ allowed_skills: allowedSkills }),
+      });
+    },
   },
   skills: {
     list() {
@@ -183,13 +226,29 @@ export const api = {
     get(id: string) {
       return request<{ skill: SkillRecord }>(`/api/skills/${id}`);
     },
-    create(data: { name: string; description: string; category: SkillRecord["category"]; body: string; id?: string }) {
+    create(data: {
+      name: string;
+      description: string;
+      category: SkillRecord["category"];
+      body: string;
+      org_enabled?: boolean;
+      id?: string;
+    }) {
       return request<{ skill: SkillRecord }>("/api/skills", {
         method: "POST",
         body: JSON.stringify(data),
       });
     },
-    update(id: string, data: { name: string; description: string; category: SkillRecord["category"]; body: string }) {
+    update(
+      id: string,
+      data: {
+        name: string;
+        description: string;
+        category: SkillRecord["category"];
+        body: string;
+        org_enabled?: boolean;
+      },
+    ) {
       return request<{ skill: SkillRecord }>(`/api/skills/${id}`, {
         method: "PUT",
         body: JSON.stringify(data),
@@ -197,6 +256,18 @@ export const api = {
     },
     remove(id: string) {
       return request<{ success: true }>(`/api/skills/${id}`, { method: "DELETE" });
+    },
+    updatePermissions(
+      id: string,
+      data: {
+        channels?: { id: string; enabled: boolean }[];
+        users?: { id: string; enabled: boolean }[];
+      },
+    ) {
+      return request<{ success: true }>(`/api/skills/${id}/permissions`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
     },
   },
 };

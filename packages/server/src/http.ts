@@ -17,8 +17,10 @@ import { skillsRoutes } from "./api/skills";
 import { userRoutes } from "./api/users";
 import { whatsappRoutes } from "./api/whatsapp";
 import type { Config } from "./config";
+import { createChannelRepository } from "./db/repositories/channels";
 import { createSettingsRepository } from "./db/repositories/settings";
 import { createUserRepository } from "./db/repositories/users";
+import { createWaGroupRepository } from "./db/repositories/wa-groups";
 import type { DB } from "./db/schema";
 import type { SlackBot } from "./slack/bot";
 import type { WhatsAppBot } from "./whatsapp/bot";
@@ -33,6 +35,8 @@ interface AppDeps {
 
 export function createApp(db: Kysely<DB>, config: Config, deps?: AppDeps) {
   const app = new Hono();
+  const channelRepo = createChannelRepository(db);
+  const waGroupRepo = createWaGroupRepository(db);
   const settings = createSettingsRepository(db);
   const users = createUserRepository(db);
 
@@ -50,11 +54,17 @@ export function createApp(db: Kysely<DB>, config: Config, deps?: AppDeps) {
     }),
   );
   app.route("/api/settings", settingsRoutes(settings));
-  app.route("/api/skills", skillsRoutes(config));
+  app.route("/api/skills", skillsRoutes(config, { channelRepo, waGroupRepo, userRepo: users }));
   app.route("/api/users", userRoutes(users));
   app.route(
     "/api/channels",
-    channelRoutes({ whatsapp: deps?.whatsapp, getSlack: deps?.getSlack, onSlackDisconnect: deps?.onSlackDisconnect }),
+    channelRoutes({
+      whatsapp: deps?.whatsapp,
+      getSlack: deps?.getSlack,
+      onSlackDisconnect: deps?.onSlackDisconnect,
+      channelRepo,
+      waGroupRepo,
+    }),
   );
 
   if (deps?.whatsapp) {

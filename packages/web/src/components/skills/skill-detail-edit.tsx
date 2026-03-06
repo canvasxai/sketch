@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { api } from "@/lib/api";
 import type {
   Skill,
   SkillCategory,
@@ -28,8 +29,9 @@ import {
   SpinnerGapIcon,
   XIcon,
 } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
 import { Building2, Download, MessageCircle, Star, Store, User, Users } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export interface SkillDraft {
   name: string;
@@ -57,8 +59,46 @@ export function SkillDetailEdit({ skill, activeTab, onTabChange, onBack, onSave,
   const [category, setCategory] = useState<SkillCategory>(skill?.category ?? "productivity");
 
   const [orgEnabled, setOrgEnabled] = useState(skill?.status.org ?? false);
-  const [channels, setChannels] = useState<SkillChannelEntry[]>(skill?.status.channels ?? []);
-  const [individuals, setIndividuals] = useState<SkillIndividualEntry[]>(skill?.status.individuals ?? []);
+
+  const skillId = skill?.id ?? null;
+
+  const { data: slackData } = useQuery({
+    queryKey: ["channels", "slack", "list"],
+    queryFn: () => api.channels.listSlackChannels(),
+    enabled: !!skillId,
+  });
+  const { data: groupData } = useQuery({
+    queryKey: ["channels", "whatsapp", "groups"],
+    queryFn: () => api.channels.listWaGroups(),
+    enabled: !!skillId,
+  });
+  const { data: usersData } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => api.users.list(),
+    enabled: !!skillId,
+  });
+
+  const [channels, setChannels] = useState<SkillChannelEntry[]>([]);
+  const [individuals, setIndividuals] = useState<SkillIndividualEntry[]>([]);
+
+  const permissionsInitialized = useRef(false);
+  useEffect(() => {
+    if (permissionsInitialized.current || !skillId) return;
+    if (!slackData || !groupData || !usersData) return;
+    const slack = slackData.channels
+      .filter((ch) => ch.allowed_skills === null || ch.allowed_skills.includes(skillId))
+      .map((ch) => ({ id: ch.id, name: ch.name, type: "slack" as const, enabled: true }));
+    const wa = groupData.groups
+      .filter((g) => g.allowed_skills === null || g.allowed_skills.includes(skillId))
+      .map((g) => ({ id: g.id, name: g.name, type: "whatsapp" as const, enabled: true }));
+    setChannels([...slack, ...wa]);
+    setIndividuals(
+      usersData.users
+        .filter((u) => u.allowed_skills === null || u.allowed_skills.includes(skillId))
+        .map((u) => ({ id: u.id, name: u.name, enabled: true })),
+    );
+    permissionsInitialized.current = true;
+  }, [skillId, slackData, groupData, usersData]);
 
   const [showChannelPicker, setShowChannelPicker] = useState(false);
   const [showIndividualPicker, setShowIndividualPicker] = useState(false);
@@ -117,9 +157,11 @@ export function SkillDetailEdit({ skill, activeTab, onTabChange, onBack, onSave,
     setChannels((prev) => [...prev, { ...channel, enabled: true }]);
     setShowChannelPicker(false);
   }, []);
+
   const toggleChannel = useCallback((id: string) => {
     setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, enabled: !c.enabled } : c)));
   }, []);
+
   const removeChannel = useCallback((id: string) => {
     setChannels((prev) => prev.filter((c) => c.id !== id));
   }, []);
@@ -128,9 +170,11 @@ export function SkillDetailEdit({ skill, activeTab, onTabChange, onBack, onSave,
     setIndividuals((prev) => [...prev, { ...individual, enabled: true }]);
     setShowIndividualPicker(false);
   }, []);
+
   const toggleIndividual = useCallback((id: string) => {
     setIndividuals((prev) => prev.map((i) => (i.id === id ? { ...i, enabled: !i.enabled } : i)));
   }, []);
+
   const removeIndividual = useCallback((id: string) => {
     setIndividuals((prev) => prev.filter((i) => i.id !== id));
   }, []);
@@ -144,10 +188,23 @@ export function SkillDetailEdit({ skill, activeTab, onTabChange, onBack, onSave,
     });
   }, []);
 
-  // TODO: Populate from the org's available channels and exclude ones already added to the skill.
-  const unaddedChannels: SkillChannelEntry[] = [];
-  // TODO: Populate from the org's available individuals and exclude ones already added to the skill.
-  const unaddedIndividuals: SkillIndividualEntry[] = [];
+  const unaddedChannels: SkillChannelEntry[] = useMemo(() => {
+    const addedIds = new Set(channels.map((c) => c.id));
+    const slack = (slackData?.channels ?? [])
+      .filter((ch) => !addedIds.has(ch.id))
+      .map((ch) => ({ id: ch.id, name: ch.name, type: "slack" as const, enabled: false }));
+    const wa = (groupData?.groups ?? [])
+      .filter((g) => !addedIds.has(g.id))
+      .map((g) => ({ id: g.id, name: g.name, type: "whatsapp" as const, enabled: false }));
+    return [...slack, ...wa];
+  }, [slackData, groupData, channels]);
+
+  const unaddedIndividuals: SkillIndividualEntry[] = useMemo(() => {
+    const addedIds = new Set(individuals.map((i) => i.id));
+    return (usersData?.users ?? [])
+      .filter((u) => !addedIds.has(u.id))
+      .map((u) => ({ id: u.id, name: u.name, enabled: false }));
+  }, [usersData, individuals]);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [scrolled, setScrolled] = useState(false);

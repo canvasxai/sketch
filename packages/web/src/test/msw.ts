@@ -110,6 +110,7 @@ export const handlers = [
           email: null,
           slack_user_id: "U001",
           whatsapp_number: null,
+          allowed_skills: null,
           created_at: "2026-01-01T00:00:00Z",
         },
         {
@@ -118,6 +119,7 @@ export const handlers = [
           email: null,
           slack_user_id: null,
           whatsapp_number: "+919876543210",
+          allowed_skills: null,
           created_at: "2026-01-02T00:00:00Z",
         },
       ],
@@ -140,6 +142,7 @@ export const handlers = [
           email: null,
           slack_user_id: null,
           whatsapp_number: body.whatsappNumber,
+          allowed_skills: null,
           created_at: new Date().toISOString(),
         },
       },
@@ -156,12 +159,76 @@ export const handlers = [
         email: null,
         slack_user_id: "U001",
         whatsapp_number: body.whatsappNumber ?? null,
+        allowed_skills: null,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    });
+  }),
+
+  http.patch("/api/users/:id/skills", async ({ request }) => {
+    const body = (await request.json()) as { allowed_skills: string[] | null };
+    return HttpResponse.json({
+      user: {
+        id: "u1",
+        name: "Alice Smith",
+        email: null,
+        slack_user_id: "U001",
+        whatsapp_number: null,
+        allowed_skills: body.allowed_skills,
         created_at: "2026-01-01T00:00:00Z",
       },
     });
   }),
 
   http.delete("/api/users/:id", () => {
+    return HttpResponse.json({ success: true });
+  }),
+
+  http.get("/api/channels/slack/list", () => {
+    return HttpResponse.json({ channels: [] });
+  }),
+
+  http.patch("/api/channels/slack/:id", async ({ request }) => {
+    const body = (await request.json()) as { allowed_skills: string[] | null };
+    return HttpResponse.json({
+      channel: {
+        id: "ch1",
+        slack_channel_id: "C001",
+        name: "general",
+        type: "channel",
+        allowed_skills: body.allowed_skills,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    });
+  }),
+
+  http.get("/api/channels/whatsapp/groups", () => {
+    return HttpResponse.json({ groups: [] });
+  }),
+
+  http.patch("/api/channels/whatsapp/groups/:id", async ({ request }) => {
+    const body = (await request.json()) as { allowed_skills: string[] | null };
+    return HttpResponse.json({
+      group: {
+        id: "g1",
+        group_jid: "g1@g.us",
+        name: "Test Group",
+        allowed_skills: body.allowed_skills,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    });
+  }),
+
+  http.get("/api/skills", () => {
+    return HttpResponse.json({
+      skills: [
+        { id: "canvas", name: "Canvas", description: "Canvas integration", category: "integration", body: "" },
+        { id: "crm", name: "CRM", description: "CRM operations", category: "integration", body: "" },
+      ],
+    });
+  }),
+
+  http.patch("/api/skills/:id/permissions", () => {
     return HttpResponse.json({ success: true });
   }),
 

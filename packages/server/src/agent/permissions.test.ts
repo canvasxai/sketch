@@ -11,13 +11,11 @@ function expectDeny(result: PermissionResult): asserts result is Extract<Permiss
 }
 
 describe("createCanUseTool", () => {
-  let canUseTool: ReturnType<typeof createCanUseTool> extends Promise<infer T>
-    ? never
-    : ReturnType<typeof createCanUseTool>;
+  let canUseTool: ReturnType<typeof createCanUseTool>;
 
   beforeEach(() => {
     const logger = createTestLogger();
-    canUseTool = createCanUseTool(WORKSPACE, logger, CLAUDE_DIR);
+    canUseTool = createCanUseTool({ absWorkspace: WORKSPACE, logger, claudeDir: CLAUDE_DIR });
   });
 
   describe("tool allowlist", () => {
@@ -67,6 +65,118 @@ describe("createCanUseTool", () => {
       const result = await canUseTool("mcp_missing_prefix", {});
       expectDeny(result);
       expect(result.message).toContain("not allowed");
+    });
+  });
+
+  describe("skill allowlist", () => {
+    it("allows any skill when allowedSkills is undefined (no restriction)", async () => {
+      const logger = createTestLogger();
+      const check = createCanUseTool({ absWorkspace: WORKSPACE, logger, claudeDir: CLAUDE_DIR });
+      const result = await check("Skill", { name: "canvas" });
+      expect(result.behavior).toBe("allow");
+    });
+
+    it("allows any skill when allowedSkills is null (no restriction)", async () => {
+      const logger = createTestLogger();
+      const check = createCanUseTool({
+        absWorkspace: WORKSPACE,
+        logger,
+        claudeDir: CLAUDE_DIR,
+        allowedSkills: null,
+      });
+      const result = await check("Skill", { name: "canvas" });
+      expect(result.behavior).toBe("allow");
+    });
+
+    it("allows skill that is in the allowedSkills list", async () => {
+      const logger = createTestLogger();
+      const check = createCanUseTool({
+        absWorkspace: WORKSPACE,
+        logger,
+        claudeDir: CLAUDE_DIR,
+        allowedSkills: ["canvas", "crm"],
+      });
+      const result = await check("Skill", { name: "canvas" });
+      expect(result.behavior).toBe("allow");
+    });
+
+    it("denies skill that is not in the allowedSkills list", async () => {
+      const logger = createTestLogger();
+      const check = createCanUseTool({
+        absWorkspace: WORKSPACE,
+        logger,
+        claudeDir: CLAUDE_DIR,
+        allowedSkills: ["canvas", "crm"],
+      });
+      const result = await check("Skill", { name: "secret-skill" });
+      expectDeny(result);
+      expect(result.message).toContain("secret-skill");
+      expect(result.message).toContain("not enabled");
+    });
+
+    it("denies all skills when allowedSkills is empty array", async () => {
+      const logger = createTestLogger();
+      const check = createCanUseTool({
+        absWorkspace: WORKSPACE,
+        logger,
+        claudeDir: CLAUDE_DIR,
+        allowedSkills: [],
+      });
+      const result = await check("Skill", { name: "canvas" });
+      expectDeny(result);
+      expect(result.message).toContain("canvas");
+      expect(result.message).toContain("not enabled");
+    });
+
+    it("denies Skill when input.name is missing and allowedSkills restricts", async () => {
+      const logger = createTestLogger();
+      const check = createCanUseTool({
+        absWorkspace: WORKSPACE,
+        logger,
+        claudeDir: CLAUDE_DIR,
+        allowedSkills: ["canvas"],
+      });
+      const result = await check("Skill", {});
+      expectDeny(result);
+      expect(result.message).toContain("missing skill name");
+    });
+
+    it("denies Skill when input.name is non-string and allowedSkills restricts", async () => {
+      const logger = createTestLogger();
+      const check = createCanUseTool({
+        absWorkspace: WORKSPACE,
+        logger,
+        claudeDir: CLAUDE_DIR,
+        allowedSkills: ["canvas"],
+      });
+      const result = await check("Skill", { name: 42 });
+      expectDeny(result);
+      expect(result.message).toContain("missing skill name");
+    });
+
+    it("denies Skill when input.name is missing and allowedSkills is empty", async () => {
+      const logger = createTestLogger();
+      const check = createCanUseTool({
+        absWorkspace: WORKSPACE,
+        logger,
+        claudeDir: CLAUDE_DIR,
+        allowedSkills: [],
+      });
+      const result = await check("Skill", {});
+      expectDeny(result);
+      expect(result.message).toContain("missing skill name");
+    });
+
+    it("does not affect non-Skill tools", async () => {
+      const logger = createTestLogger();
+      const check = createCanUseTool({
+        absWorkspace: WORKSPACE,
+        logger,
+        claudeDir: CLAUDE_DIR,
+        allowedSkills: [],
+      });
+      const result = await check("Read", { file_path: `${WORKSPACE}/file.txt` });
+      expect(result.behavior).toBe("allow");
     });
   });
 

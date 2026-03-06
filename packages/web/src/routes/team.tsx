@@ -1,3 +1,4 @@
+import { SkillsPermissionsDialog } from "@/components/skills/skills-permissions-dialog";
 /**
  * Team page — manage workspace members.
  * Primary use case: add WhatsApp users so they can chat with the bot.
@@ -30,6 +31,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import type { User } from "@/lib/api";
 import { api } from "@/lib/api";
 import {
+  BrainIcon,
   DotsThreeIcon,
   PencilSimpleIcon,
   PlusIcon,
@@ -157,41 +159,51 @@ function MemberRow({
   onEdit: () => void;
   onRemove: () => void;
 }) {
+  const queryClient = useQueryClient();
   const initials = getInitials(user.name);
+  const [showSkillsDialog, setShowSkillsDialog] = useState(false);
+
+  const handleSaveSkills = async (allowedSkills: string[] | null) => {
+    await api.users.updateSkills(user.id, allowedSkills);
+    toast.success(`Skills updated for ${user.name}`);
+    queryClient.invalidateQueries({ queryKey: ["users"] });
+  };
 
   return (
-    <div className={`flex items-center gap-4 px-4 py-4 ${isLast ? "" : "border-b border-border"}`}>
-      <Avatar className="size-9">
-        <AvatarFallback className="text-xs font-medium">{initials}</AvatarFallback>
-      </Avatar>
+    <>
+      <div className={`flex items-center gap-4 px-4 py-4 ${isLast ? "" : "border-b border-border"}`}>
+        <Avatar className="size-9">
+          <AvatarFallback className="text-xs font-medium">{initials}</AvatarFallback>
+        </Avatar>
 
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="truncate text-sm font-medium">{user.name}</span>
-        {isCurrentAdmin && (
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-            You
-          </Badge>
-        )}
-      </div>
-
-      <TooltipProvider>
-        <div className="flex items-center gap-2">
-          <ChannelBadge
-            icon={<SlackLogoIcon size={16} />}
-            active={!!user.slack_user_id}
-            tooltip={user.slack_user_id ? "Slack connected" : "Slack not connected"}
-            activeColor="#E01E5A"
-          />
-          <ChannelBadge
-            icon={<WhatsappLogoIcon size={16} />}
-            active={!!user.whatsapp_number}
-            tooltip={user.whatsapp_number ? "WhatsApp connected" : "WhatsApp not connected"}
-            activeColor="#25D366"
-          />
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="truncate text-sm font-medium">{user.name}</span>
+          {isCurrentAdmin && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+              You
+            </Badge>
+          )}
         </div>
-      </TooltipProvider>
 
-      {!isCurrentAdmin && (
+        <UserSkillsBadge allowedSkills={user.allowed_skills} />
+
+        <TooltipProvider>
+          <div className="flex items-center gap-2">
+            <ChannelBadge
+              icon={<SlackLogoIcon size={16} />}
+              active={!!user.slack_user_id}
+              tooltip={user.slack_user_id ? "Slack connected" : "Slack not connected"}
+              activeColor="#E01E5A"
+            />
+            <ChannelBadge
+              icon={<WhatsappLogoIcon size={16} />}
+              active={!!user.whatsapp_number}
+              tooltip={user.whatsapp_number ? "WhatsApp connected" : "WhatsApp not connected"}
+              activeColor="#25D366"
+            />
+          </div>
+        </TooltipProvider>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="size-7">
@@ -199,19 +211,52 @@ function MemberRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onEdit}>
-              <PencilSimpleIcon size={14} className="mr-2" />
-              Edit
+            <DropdownMenuItem onClick={() => setShowSkillsDialog(true)}>
+              <BrainIcon size={14} className="mr-2" />
+              Skills
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive" onClick={onRemove}>
-              <UserMinusIcon size={14} className="mr-2" />
-              Remove member
-            </DropdownMenuItem>
+            {!isCurrentAdmin && (
+              <>
+                <DropdownMenuItem onClick={onEdit}>
+                  <PencilSimpleIcon size={14} className="mr-2" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-destructive" onClick={onRemove}>
+                  <UserMinusIcon size={14} className="mr-2" />
+                  Remove member
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
-      )}
-    </div>
+      </div>
+
+      <SkillsPermissionsDialog
+        open={showSkillsDialog}
+        onOpenChange={setShowSkillsDialog}
+        title={`Skills for ${user.name}`}
+        description="Choose which skills the bot can use in DMs with this user."
+        currentAllowedSkills={user.allowed_skills}
+        onSave={handleSaveSkills}
+      />
+    </>
+  );
+}
+
+function UserSkillsBadge({ allowedSkills }: { allowedSkills: string[] | null }) {
+  if (allowedSkills === null) return null;
+  if (allowedSkills.length === 0) {
+    return (
+      <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+        No skills
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+      {allowedSkills.length} skill{allowedSkills.length === 1 ? "" : "s"}
+    </Badge>
   );
 }
 

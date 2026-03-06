@@ -3,7 +3,11 @@ import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
+import { parseAllowedSkills } from "../agent/skill-permissions";
 import type { Config } from "../config";
+import type { createChannelRepository } from "../db/repositories/channels";
+import type { createUserRepository } from "../db/repositories/users";
+import type { createWaGroupRepository } from "../db/repositories/wa-groups";
 import { type LoadedSkill, loadClaudeSkillsFromDirAsync } from "../skills/loader";
 
 function getOrgSkillsDir(): string {
@@ -81,12 +85,19 @@ function renderFrontMatterString(value: string): string {
   return JSON.stringify(value);
 }
 
-function renderSkillMd(data: { name: string; description: string; category: string; body: string }): string {
+function renderSkillMd(data: {
+  name: string;
+  description: string;
+  category: string;
+  body: string;
+  org_enabled?: boolean;
+}): string {
   const fm = [
     "---",
     `name: ${renderFrontMatterString(data.name)}`,
     `description: ${renderFrontMatterString(data.description)}`,
     `category: ${renderFrontMatterString(data.category)}`,
+    `org_enabled: ${data.org_enabled ?? true}`,
     "---",
     "",
   ].join("\n");
@@ -94,7 +105,13 @@ function renderSkillMd(data: { name: string; description: string; category: stri
   return fm + body + (body.endsWith("\n") || body === "" ? "" : "\n");
 }
 
-export function skillsRoutes(config: Pick<Config, "DATA_DIR">) {
+interface SkillsDeps {
+  channelRepo: ReturnType<typeof createChannelRepository>;
+  waGroupRepo: ReturnType<typeof createWaGroupRepository>;
+  userRepo: ReturnType<typeof createUserRepository>;
+}
+
+export function skillsRoutes(config: Pick<Config, "DATA_DIR">, deps: SkillsDeps) {
   const routes = new Hono();
 
   routes.get("/", async (c) => {
@@ -143,6 +160,7 @@ export function skillsRoutes(config: Pick<Config, "DATA_DIR">) {
       category?: string;
       body?: string;
       id?: string;
+      org_enabled?: boolean;
     } | null;
 
     if (!body || typeof body.name !== "string" || typeof body.body !== "string") {
@@ -163,7 +181,14 @@ export function skillsRoutes(config: Pick<Config, "DATA_DIR">) {
 
     const category = typeof body.category === "string" && body.category.trim() ? body.category.trim() : "productivity";
     const description = typeof body.description === "string" ? body.description.trim() : "";
-    const md = renderSkillMd({ name: body.name.trim(), description, category, body: body.body });
+    const orgEnabled = typeof body.org_enabled === "boolean" ? body.org_enabled : true;
+    const md = renderSkillMd({
+      name: body.name.trim(),
+      description,
+      category,
+      body: body.body,
+      org_enabled: orgEnabled,
+    });
 
     const skillDir = join(getOrgSkillsDir(), id);
     await mkdir(skillDir, { recursive: true });
@@ -183,6 +208,7 @@ export function skillsRoutes(config: Pick<Config, "DATA_DIR">) {
       description?: string;
       category?: string;
       body?: string;
+      org_enabled?: boolean;
     } | null;
 
     if (!body || typeof body.name !== "string" || typeof body.body !== "string") {
@@ -210,7 +236,14 @@ export function skillsRoutes(config: Pick<Config, "DATA_DIR">) {
 
     const category = typeof body.category === "string" && body.category.trim() ? body.category.trim() : base.category;
     const description = typeof body.description === "string" ? body.description.trim() : base.description;
-    const md = renderSkillMd({ name: body.name.trim(), description, category, body: body.body });
+    const orgEnabled = typeof body.org_enabled === "boolean" ? body.org_enabled : base.org_enabled;
+    const md = renderSkillMd({
+      name: body.name.trim(),
+      description,
+      category,
+      body: body.body,
+      org_enabled: orgEnabled,
+    });
 
     if (existingOrg) {
       await writeFile(orgSkillMdPath(id), md, "utf-8");
@@ -250,5 +283,69 @@ export function skillsRoutes(config: Pick<Config, "DATA_DIR">) {
     return c.json({ success: true });
   });
 
+  routes.patch("/:id/permissions", async (c) => {
+    const id = assertSkillId(c.req.param("id"));
+    if (!id) return c.json({ error: { code: "BAD_REQUEST", message: "Invalid skill id" } }, 400);
+
+    const body = (await c.req.json().catch(() => null)) as {
+      channels?: { id: string; enabled: boolean }[];
+      users?: { id: string; enabled: boolean }[];
+    } | null;
+
+    if (!body) {
+      return c.json({ error: { code: "BAD_REQUEST", message: "Invalid request body" } }, 400);
+    }
+
+    const channelEntries = body.channels ?? [];
+    const userEntries = body.users ?? [];
+
+    // Sync channel/group permissions: add or remove this skill ID from each entity's allowed_skills
+    for (const entry of channelEntries) {
+      // Try slack channel first, then wa group
+      const slackCh = await deps.channelRepo.findById(entry.id);
+      if (slackCh) {
+        const current = parseAllowedSkills(slackCh.allowed_skills);
+        const next = syncSkillInList(current, id, entry.enabled);
+        if (next !== current) await deps.channelRepo.updateAllowedSkills(entry.id, next);
+        continue;
+      }
+      const waGroup = await deps.waGroupRepo.findById(entry.id);
+      if (waGroup) {
+        const current = parseAllowedSkills(waGroup.allowed_skills);
+        const next = syncSkillInList(current, id, entry.enabled);
+        if (next !== current) await deps.waGroupRepo.updateAllowedSkills(entry.id, next);
+      }
+    }
+
+    // Sync user permissions
+    for (const entry of userEntries) {
+      const user = await deps.userRepo.findById(entry.id);
+      if (!user) continue;
+      const current = parseAllowedSkills(user.allowed_skills);
+      const next = syncSkillInList(current, id, entry.enabled);
+      if (next !== current) await deps.userRepo.updateAllowedSkills(entry.id, next);
+    }
+
+    return c.json({ success: true });
+  });
+
   return routes;
+}
+
+/**
+ * Returns the updated allowed_skills list after adding/removing a skill ID.
+ * `null` means unrestricted — adding a skill to an unrestricted entity is a no-op,
+ * but removing one converts it to an explicit list of all-minus-one.
+ * Returns the same reference if no change is needed.
+ */
+function syncSkillInList(current: string[] | null, skillId: string, enabled: boolean): string[] | null {
+  if (current === null) {
+    // Unrestricted — adding is a no-op; we can't remove from "all" without
+    // knowing the full skill list, so treat null as "no change needed"
+    return null;
+  }
+  const has = current.includes(skillId);
+  if (enabled && !has) return [...current, skillId];
+  if (!enabled && has) return current.filter((s) => s !== skillId);
+  return current;
 }

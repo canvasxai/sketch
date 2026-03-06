@@ -47,6 +47,13 @@ export function createUserRepository(db: Kysely<DB>) {
       return db.selectFrom("users").selectAll().where("id", "=", id).executeTakeFirstOrThrow();
     },
 
+    async updateAllowedSkills(id: string, allowedSkills: string[] | null) {
+      const raw = allowedSkills === null ? null : JSON.stringify(allowedSkills);
+      const result = await db.updateTable("users").set({ allowed_skills: raw }).where("id", "=", id).executeTakeFirst();
+
+      return Number(result.numUpdatedRows) > 0;
+    },
+
     async remove(id: string) {
       return db.deleteFrom("users").where("id", "=", id).execute();
     },

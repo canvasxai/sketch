@@ -169,6 +169,39 @@ describe("update()", () => {
   });
 });
 
+describe("updateAllowedSkills()", () => {
+  it("sets allowed_skills to a JSON array", async () => {
+    const user = await users.create({ name: "Pam", slackUserId: "U020" });
+    const updated = await users.updateAllowedSkills(user.id, ["canvas", "crm"]);
+    expect(updated).toBe(true);
+
+    const found = await users.findById(user.id);
+    expect(found?.allowed_skills).toBe('["canvas","crm"]');
+  });
+
+  it("sets allowed_skills to null (unrestricted)", async () => {
+    const user = await users.create({ name: "Quinn", slackUserId: "U021" });
+    await users.updateAllowedSkills(user.id, ["canvas"]);
+    await users.updateAllowedSkills(user.id, null);
+
+    const found = await users.findById(user.id);
+    expect(found?.allowed_skills).toBeNull();
+  });
+
+  it("sets allowed_skills to empty array (no skills)", async () => {
+    const user = await users.create({ name: "Ray", slackUserId: "U022" });
+    await users.updateAllowedSkills(user.id, []);
+
+    const found = await users.findById(user.id);
+    expect(found?.allowed_skills).toBe("[]");
+  });
+
+  it("returns false for non-existent user", async () => {
+    const updated = await users.updateAllowedSkills("nonexistent-id", ["canvas"]);
+    expect(updated).toBe(false);
+  });
+});
+
 describe("remove()", () => {
   it("deletes user", async () => {
     const created = await users.create({ name: "Jack", slackUserId: "U013" });

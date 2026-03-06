@@ -21,8 +21,10 @@ interface SkillCardProps {
 
 export function SkillCard({ skill, onCardClick, onDuplicate, onDelete }: SkillCardProps) {
   return (
-    <button
-      type="button"
+    // biome-ignore lint/a11y/useSemanticElements: card contains a nested dropdown button, so outer element cannot be <button>
+    <div
+      role="button"
+      tabIndex={0}
       className={cn(
         "cursor-pointer rounded-xl border bg-card p-5 transition-[background-color,border-color] duration-200 ease-in-out flex flex-col text-left w-full",
         // Light mode (theme-aware)
@@ -31,6 +33,12 @@ export function SkillCard({ skill, onCardClick, onDuplicate, onDelete }: SkillCa
         "dark:border-[rgba(255,255,255,0.07)] dark:hover:border-[rgba(255,255,255,0.2)] dark:hover:bg-[rgba(107,125,250,0.03)]",
       )}
       onClick={() => onCardClick(skill.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onCardClick(skill.id);
+        }
+      }}
     >
       {/* Top row: category pill + source tags + overflow */}
       <div className="flex items-center justify-between gap-2">
@@ -83,6 +91,6 @@ export function SkillCard({ skill, onCardClick, onDuplicate, onDelete }: SkillCa
           </div>
         ) : null}
       </div>
-    </button>
+    </div>
   );
 }

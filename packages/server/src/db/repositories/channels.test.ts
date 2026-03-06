@@ -29,6 +29,11 @@ describe("create()", () => {
     expect(channel.type).toBe("private_channel");
   });
 
+  it("sets allowed_skills to null by default", async () => {
+    const channel = await channels.create({ slackChannelId: "C001", name: "general", type: "public_channel" });
+    expect(channel.allowed_skills).toBeNull();
+  });
+
   it("created_at is populated automatically", async () => {
     const channel = await channels.create({ slackChannelId: "C003", name: "dev", type: "public_channel" });
     expect(channel.created_at).toBeDefined();
@@ -73,5 +78,52 @@ describe("findById()", () => {
   it("returns undefined when not found", async () => {
     const found = await channels.findById("nonexistent-id");
     expect(found).toBeUndefined();
+  });
+});
+
+describe("listAll()", () => {
+  it("returns empty array when no channels exist", async () => {
+    const all = await channels.listAll();
+    expect(all).toEqual([]);
+  });
+
+  it("returns all channels", async () => {
+    await channels.create({ slackChannelId: "C001", name: "general", type: "public_channel" });
+    await channels.create({ slackChannelId: "C002", name: "random", type: "public_channel" });
+    const all = await channels.listAll();
+    expect(all).toHaveLength(2);
+  });
+});
+
+describe("updateAllowedSkills()", () => {
+  it("sets allowed_skills to a JSON array", async () => {
+    const channel = await channels.create({ slackChannelId: "C010", name: "test", type: "public_channel" });
+    const updated = await channels.updateAllowedSkills(channel.id, ["canvas", "crm"]);
+    expect(updated).toBe(true);
+
+    const found = await channels.findById(channel.id);
+    expect(found?.allowed_skills).toBe('["canvas","crm"]');
+  });
+
+  it("sets allowed_skills to null (unrestricted)", async () => {
+    const channel = await channels.create({ slackChannelId: "C011", name: "test", type: "public_channel" });
+    await channels.updateAllowedSkills(channel.id, ["canvas"]);
+    await channels.updateAllowedSkills(channel.id, null);
+
+    const found = await channels.findById(channel.id);
+    expect(found?.allowed_skills).toBeNull();
+  });
+
+  it("sets allowed_skills to empty array (no skills)", async () => {
+    const channel = await channels.create({ slackChannelId: "C012", name: "test", type: "public_channel" });
+    await channels.updateAllowedSkills(channel.id, []);
+
+    const found = await channels.findById(channel.id);
+    expect(found?.allowed_skills).toBe("[]");
+  });
+
+  it("returns false for non-existent channel", async () => {
+    const updated = await channels.updateAllowedSkills("nonexistent-id", ["canvas"]);
+    expect(updated).toBe(false);
   });
 });

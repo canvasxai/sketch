@@ -8,8 +8,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import type { Skill } from "@/lib/skills-data";
-import { getActiveChannels, getActiveIndividuals, getCategoryLabel, isSkillEnabled } from "@/lib/skills-data";
+import { api } from "@/lib/api";
+import type { Skill, SkillChannelEntry, SkillIndividualEntry } from "@/lib/skills-data";
+import { getCategoryLabel } from "@/lib/skills-data";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeftIcon,
@@ -18,6 +19,7 @@ import {
   MagnifyingGlassIcon,
   PencilSimpleIcon,
 } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
 import { Building2, Download, MessageCircle, Star, Store, User, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -47,9 +49,36 @@ export function SkillDetailView({
   isExplorePreview = false,
   onAddSkill,
 }: SkillDetailViewProps) {
-  const enabled = isSkillEnabled(skill.status);
-  const activeChannels = getActiveChannels(skill.status);
-  const activeIndividuals = getActiveIndividuals(skill.status);
+  const { data: slackData } = useQuery({
+    queryKey: ["channels", "slack", "list"],
+    queryFn: () => api.channels.listSlackChannels(),
+  });
+  const { data: groupData } = useQuery({
+    queryKey: ["channels", "whatsapp", "groups"],
+    queryFn: () => api.channels.listWaGroups(),
+  });
+  const { data: usersData } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => api.users.list(),
+  });
+
+  const activeChannels: SkillChannelEntry[] = useMemo(() => {
+    const slack = (slackData?.channels ?? [])
+      .filter((ch) => ch.allowed_skills === null || ch.allowed_skills.includes(skill.id))
+      .map((ch) => ({ id: ch.id, name: ch.name, type: "slack" as const, enabled: true }));
+    const wa = (groupData?.groups ?? [])
+      .filter((g) => g.allowed_skills === null || g.allowed_skills.includes(skill.id))
+      .map((g) => ({ id: g.id, name: g.name, type: "whatsapp" as const, enabled: true }));
+    return [...slack, ...wa];
+  }, [slackData, groupData, skill.id]);
+
+  const activeIndividuals: SkillIndividualEntry[] = useMemo(() => {
+    return (usersData?.users ?? [])
+      .filter((u) => u.allowed_skills === null || u.allowed_skills.includes(skill.id))
+      .map((u) => ({ id: u.id, name: u.name, enabled: true }));
+  }, [usersData, skill.id]);
+
+  const enabled = skill.status.org || activeChannels.length > 0 || activeIndividuals.length > 0;
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [scrolled, setScrolled] = useState(false);
@@ -246,8 +275,8 @@ function AdminPermissionsView({
     });
   };
 
-  const displayChannels = skill.status.org ? skill.status.channels : activeChannels;
-  const displayIndividuals = skill.status.org ? skill.status.individuals : activeIndividuals;
+  const displayChannels = activeChannels;
+  const displayIndividuals = activeIndividuals;
 
   const filteredChannels = useMemo(() => {
     const q = channelSearch.toLowerCase().trim();
@@ -320,7 +349,7 @@ function AdminPermissionsView({
                   filteredChannels.length > 0 ? (
                     filteredChannels.map((ch) => {
                       const isActive = skill.status.org || ch.enabled;
-                      const chType = skill.status.channels.find((c) => c.id === ch.id)?.type ?? "slack";
+                      const chType = (ch as SkillChannelEntry).type ?? "slack";
                       return (
                         <div key={ch.id} className="relative">
                           <div className="absolute -left-5 top-[15px] h-px w-5 bg-border" />

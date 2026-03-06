@@ -23,6 +23,8 @@ export function buildSystemContext(params: {
     groupName: string;
     groupDescription?: string;
   };
+  allowedSkillDescriptions?: { name: string; body: string }[] | null;
+  claudeMdContents?: string[];
 }): string {
   const sections: string[] = [];
 
@@ -123,6 +125,30 @@ export function buildSystemContext(params: {
 
   if (params.channelContext || params.groupContext) {
     sections.push("Note: In this workspace, the CLAUDE.md is shared by all users.");
+  }
+
+  if (params.allowedSkillDescriptions !== undefined && params.allowedSkillDescriptions !== null) {
+    if (params.allowedSkillDescriptions.length === 0) {
+      sections.push("## Skills", "You have NO skills enabled. Do not use the Skill tool.");
+    } else {
+      const skillLines: string[] = ["## Skills", "You have access to the following skills:"];
+      for (const skill of params.allowedSkillDescriptions) {
+        skillLines.push("", `### ${skill.name}`);
+        if (skill.body) skillLines.push(skill.body);
+      }
+      skillLines.push(
+        "",
+        "These are ALL the skills available to you. Do NOT use or mention any skills not listed above.",
+      );
+      sections.push(...skillLines);
+    }
+  }
+
+  if (params.claudeMdContents?.length) {
+    sections.push("## Loaded CLAUDE.md Instructions");
+    for (const content of params.claudeMdContents) {
+      sections.push(content);
+    }
   }
 
   if (!params.channelContext && !params.groupContext) {

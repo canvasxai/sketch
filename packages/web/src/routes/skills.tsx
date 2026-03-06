@@ -8,14 +8,7 @@ import { SkillsFilterBar } from "@/components/skills/skills-filter-bar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
-import {
-  type Skill,
-  type SkillCategory,
-  categoryMeta,
-  fromApiSkill,
-  getCategoryLabel,
-  isSkillEnabled,
-} from "@/lib/skills-data";
+import { type Skill, type SkillCategory, categoryMeta, fromApiSkill, getCategoryLabel } from "@/lib/skills-data";
 import { cn } from "@/lib/utils";
 import { PlusIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -74,6 +67,36 @@ export function SkillsPage() {
   const skills = skillsQuery.data?.skills ?? [];
   const skillsErrorMessage = skillsQuery.error instanceof Error ? skillsQuery.error.message : "Failed to load skills.";
 
+  const { data: slackData } = useQuery({
+    queryKey: ["channels", "slack", "list"],
+    queryFn: () => api.channels.listSlackChannels(),
+  });
+  const { data: groupData } = useQuery({
+    queryKey: ["channels", "whatsapp", "groups"],
+    queryFn: () => api.channels.listWaGroups(),
+  });
+  const { data: usersData } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => api.users.list(),
+  });
+
+  const activeSkillIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const ch of slackData?.channels ?? []) {
+      if (ch.allowed_skills === null) continue;
+      for (const id of ch.allowed_skills) ids.add(id);
+    }
+    for (const g of groupData?.groups ?? []) {
+      if (g.allowed_skills === null) continue;
+      for (const id of g.allowed_skills) ids.add(id);
+    }
+    for (const u of usersData?.users ?? []) {
+      if (u.allowed_skills === null) continue;
+      for (const id of u.allowed_skills) ids.add(id);
+    }
+    return ids;
+  }, [slackData, groupData, usersData]);
+
   const setSkillsCache = useCallback(
     (updater: (currentSkills: Skill[]) => Skill[]) => {
       queryClient.setQueryData<{ skills: Skill[] }>(["skills"], (current) => ({
@@ -90,6 +113,7 @@ export function SkillsPage() {
         description: draft.description,
         category: draft.category,
         body: draft.body,
+        org_enabled: draft.status.org,
       }),
     onSuccess: async (res) => {
       const created = fromApiSkill(res.skill);
@@ -113,6 +137,7 @@ export function SkillsPage() {
         description: args.draft.description,
         category: args.draft.category,
         body: args.draft.body,
+        org_enabled: args.draft.status.org,
       }),
     onSuccess: async (res) => {
       setSkillsCache((currentSkills) =>
@@ -124,6 +149,7 @@ export function SkillsPage() {
                 description: res.skill.description,
                 body: res.skill.body,
                 category: res.skill.category,
+                status: { ...s.status, org: res.skill.org_enabled },
                 iconBg: categoryMeta[res.skill.category].iconBg,
                 iconEmoji: categoryMeta[res.skill.category].iconEmoji,
               }
@@ -169,10 +195,12 @@ export function SkillsPage() {
 
   // TODO: Switch the active tab to per-user visibility once viewer identity is available
   // by using `isSkillActiveForUser` and `getSkillSourcesForUser`.
-  const totalActiveCount = useMemo(() => skills.filter((s) => isSkillEnabled(s.status)).length, [skills]);
+  const isActive = useCallback((s: Skill) => s.status.org || activeSkillIds.has(s.id), [activeSkillIds]);
+
+  const totalActiveCount = useMemo(() => skills.filter(isActive).length, [skills, isActive]);
 
   const activeSkills = useMemo(() => {
-    let result = skills.filter((s) => isSkillEnabled(s.status));
+    let result = skills.filter(isActive);
     if (activeCategories.length > 0) {
       result = result.filter((s) => activeCategories.includes(s.category));
     }
@@ -181,7 +209,7 @@ export function SkillsPage() {
       result = result.filter((s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
     }
     return result;
-  }, [skills, activeCategories, searchQuery]);
+  }, [skills, activeCategories, searchQuery, isActive]);
 
   const exploreSkills = useMemo(() => {
     let result = skills;
@@ -232,14 +260,27 @@ export function SkillsPage() {
 
   const handleSave = useCallback(
     async (draft: SkillDraft) => {
+      let skillId: string;
       if (mode === "create") {
-        await createSkillMutation.mutateAsync(draft);
+        const res = await createSkillMutation.mutateAsync(draft);
+        skillId = res.skill.id;
       } else {
         if (!selectedSkillId) return;
         await updateSkillMutation.mutateAsync({ id: selectedSkillId, draft });
+        skillId = selectedSkillId;
       }
+
+      // Sync permissions in a single batch request
+      await api.skills.updatePermissions(skillId, {
+        channels: draft.status.channels.map((c) => ({ id: c.id, enabled: c.enabled })),
+        users: draft.status.individuals.map((i) => ({ id: i.id, enabled: i.enabled })),
+      });
+
+      // Refresh cached data
+      void queryClient.invalidateQueries({ queryKey: ["channels"] });
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
     },
-    [mode, selectedSkillId, createSkillMutation, updateSkillMutation],
+    [mode, selectedSkillId, createSkillMutation, updateSkillMutation, queryClient],
   );
 
   const handleCancelEdit = useCallback(() => {

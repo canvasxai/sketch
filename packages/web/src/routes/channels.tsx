@@ -1,6 +1,7 @@
+import { SkillsPermissionsDialog } from "@/components/skills/skills-permissions-dialog";
 /**
- * Channels page — displays Slack and WhatsApp platform cards with connection status.
- * WhatsApp pairing uses SSE-based QR flow via the shared WhatsAppQR component.
+ * Channels page — displays Slack and WhatsApp platform cards with connection status,
+ * plus per-channel/group skills permissions management.
  */
 import {
   AlertDialog,
@@ -12,6 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -24,13 +26,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WhatsAppQR } from "@/components/whatsapp-qr";
-import type { ChannelStatus } from "@/lib/api";
+import type { ChannelStatus, SlackChannel, WaGroup } from "@/lib/api";
 import { api } from "@/lib/api";
 import {
   ArrowSquareOutIcon,
+  BrainIcon,
   CheckIcon,
   CopySimpleIcon,
   DotsThreeIcon,
+  HashIcon,
   SlackLogoIcon,
   SpinnerGapIcon,
   WarningIcon,
@@ -80,9 +84,167 @@ export function ChannelsPage() {
           data?.channels.map((channel) => <PlatformCard key={channel.platform} channel={channel} />)
         )}
       </div>
+
+      <SkillsPermissionsSection />
     </div>
   );
 }
+
+// ── Skills Permissions Section ──────────────────────────────
+
+function SkillsPermissionsSection() {
+  const { data: slackData, isLoading: slackLoading } = useQuery({
+    queryKey: ["channels", "slack", "list"],
+    queryFn: () => api.channels.listSlackChannels(),
+  });
+
+  const { data: groupData, isLoading: groupLoading } = useQuery({
+    queryKey: ["channels", "whatsapp", "groups"],
+    queryFn: () => api.channels.listWaGroups(),
+  });
+
+  const slackChannels = slackData?.channels ?? [];
+  const waGroups = groupData?.groups ?? [];
+  const hasContent = slackChannels.length > 0 || waGroups.length > 0;
+  const isLoading = slackLoading || groupLoading;
+
+  if (isLoading) {
+    return (
+      <div className="mt-10 space-y-3">
+        <Skeleton className="h-4 w-36" />
+        <Skeleton className="h-14 rounded-lg" />
+        <Skeleton className="h-14 rounded-lg" />
+      </div>
+    );
+  }
+
+  if (!hasContent) return null;
+
+  return (
+    <div className="mt-10">
+      <h2 className="text-base font-semibold">Skills permissions</h2>
+      <p className="mt-1 text-sm text-muted-foreground">Control which skills are available in each channel or group</p>
+
+      {slackChannels.length > 0 && (
+        <div className="mt-5">
+          <p className="mb-2 text-sm font-medium text-muted-foreground">Slack channels</p>
+          <div className="rounded-lg border border-border bg-card">
+            {slackChannels.map((ch, i) => (
+              <SlackChannelRow key={ch.id} channel={ch} isLast={i === slackChannels.length - 1} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {waGroups.length > 0 && (
+        <div className="mt-5">
+          <p className="mb-2 text-sm font-medium text-muted-foreground">WhatsApp groups</p>
+          <div className="rounded-lg border border-border bg-card">
+            {waGroups.map((g, i) => (
+              <WaGroupRow key={g.id} group={g} isLast={i === waGroups.length - 1} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SlackChannelRow({ channel, isLast }: { channel: SlackChannel; isLast: boolean }) {
+  const queryClient = useQueryClient();
+  const [showSkillsDialog, setShowSkillsDialog] = useState(false);
+
+  const handleSave = async (allowedSkills: string[] | null) => {
+    await api.channels.updateSlackChannelSkills(channel.id, allowedSkills);
+    toast.success(`Skills updated for #${channel.name}`);
+    queryClient.invalidateQueries({ queryKey: ["channels", "slack", "list"] });
+  };
+
+  return (
+    <>
+      <div className={`flex items-center gap-3 px-4 py-3 ${isLast ? "" : "border-b border-border"}`}>
+        <div className="flex size-7 items-center justify-center rounded bg-muted">
+          <HashIcon size={14} className="text-muted-foreground" />
+        </div>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{channel.name}</span>
+        <SkillsBadge allowedSkills={channel.allowed_skills} />
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setShowSkillsDialog(true)}>
+          <BrainIcon size={14} />
+          Skills
+        </Button>
+      </div>
+
+      <SkillsPermissionsDialog
+        open={showSkillsDialog}
+        onOpenChange={setShowSkillsDialog}
+        title={`Skills for #${channel.name}`}
+        description="Choose which skills the bot can use in this channel."
+        currentAllowedSkills={channel.allowed_skills}
+        onSave={handleSave}
+      />
+    </>
+  );
+}
+
+function WaGroupRow({ group, isLast }: { group: WaGroup; isLast: boolean }) {
+  const queryClient = useQueryClient();
+  const [showSkillsDialog, setShowSkillsDialog] = useState(false);
+
+  const handleSave = async (allowedSkills: string[] | null) => {
+    await api.channels.updateWaGroupSkills(group.id, allowedSkills);
+    toast.success(`Skills updated for ${group.name}`);
+    queryClient.invalidateQueries({ queryKey: ["channels", "whatsapp", "groups"] });
+  };
+
+  return (
+    <>
+      <div className={`flex items-center gap-3 px-4 py-3 ${isLast ? "" : "border-b border-border"}`}>
+        <div className="flex size-7 items-center justify-center rounded bg-muted">
+          <WhatsappLogoIcon size={14} className="text-muted-foreground" />
+        </div>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{group.name}</span>
+        <SkillsBadge allowedSkills={group.allowed_skills} />
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setShowSkillsDialog(true)}>
+          <BrainIcon size={14} />
+          Skills
+        </Button>
+      </div>
+
+      <SkillsPermissionsDialog
+        open={showSkillsDialog}
+        onOpenChange={setShowSkillsDialog}
+        title={`Skills for ${group.name}`}
+        description="Choose which skills the bot can use in this group."
+        currentAllowedSkills={group.allowed_skills}
+        onSave={handleSave}
+      />
+    </>
+  );
+}
+
+function SkillsBadge({ allowedSkills }: { allowedSkills: string[] | null }) {
+  if (allowedSkills === null) {
+    return (
+      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+        All skills
+      </Badge>
+    );
+  }
+  if (allowedSkills.length === 0) {
+    return (
+      <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+        No skills
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+      {allowedSkills.length} skill{allowedSkills.length === 1 ? "" : "s"}
+    </Badge>
+  );
+}
+
+// ── Platform Cards (unchanged) ──────────────────────────────
 
 function PlatformCard({ channel }: { channel: ChannelStatus }) {
   if (channel.platform === "slack") {

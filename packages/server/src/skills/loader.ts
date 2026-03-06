@@ -14,12 +14,14 @@ export interface LoadedSkill {
   description: string;
   body: string;
   category: LoadedSkillCategory;
+  org_enabled: boolean;
 }
 
 interface FrontMatter {
   name?: string;
   description?: string;
   category?: LoadedSkillCategory;
+  org_enabled?: boolean;
 }
 
 function readSkillMarkdownSync(skillDir: string): string | null {
@@ -78,6 +80,7 @@ export function parseFrontMatter(md: string): { frontMatter: FrontMatter; body: 
     if (key === "name") fm.name = value;
     if (key === "description") fm.description = value;
     if (key === "category" && isLoadedCategory(value)) fm.category = value;
+    if (key === "org_enabled") fm.org_enabled = value === "true";
   }
 
   return { frontMatter: fm, body };
@@ -130,6 +133,7 @@ export function loadClaudeSkillsFromDir(dir: string): LoadedSkill[] {
       name: frontMatter.name ?? inferredName ?? entry,
       description: frontMatter.description ?? "",
       category: frontMatter.category ?? "productivity",
+      org_enabled: frontMatter.org_enabled ?? true,
       body,
     });
   }
@@ -160,6 +164,7 @@ export async function loadClaudeSkillsFromDirAsync(dir: string): Promise<LoadedS
           name: frontMatter.name ?? inferredName ?? entry.name,
           description: frontMatter.description ?? "",
           category: frontMatter.category ?? "productivity",
+          org_enabled: frontMatter.org_enabled ?? true,
           body,
         } satisfies LoadedSkill;
       }),

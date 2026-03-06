@@ -56,6 +56,7 @@ export interface ApiSkill {
   description: string;
   body: string;
   category: SkillCategory;
+  org_enabled: boolean;
 }
 
 // ── Category Definitions ───────────────────────────────────
@@ -127,7 +128,7 @@ export function fromApiSkill(s: ApiSkill): Skill {
     description: s.description,
     body: s.body,
     category: s.category,
-    status: { org: true, channels: [], individuals: [] },
+    status: { org: s.org_enabled, channels: [], individuals: [] },
     iconBg: categoryMeta[s.category].iconBg,
     iconEmoji: categoryMeta[s.category].iconEmoji,
     source: undefined,
