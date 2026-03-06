@@ -30,7 +30,6 @@ interface SkillDetailViewProps {
   onBack: () => void;
   onEdit: () => void;
   onDuplicate: (skill: Skill) => void;
-  onToggleDisable: (skillId: string) => void;
   onDelete: (skill: Skill) => void;
   isExplorePreview?: boolean;
   onAddSkill?: () => void;
@@ -73,7 +72,6 @@ export function SkillDetailView({
   onBack,
   onEdit,
   onDuplicate,
-  onToggleDisable,
   onDelete,
   isExplorePreview = false,
   onAddSkill,
@@ -139,9 +137,7 @@ export function SkillDetailView({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => onDuplicate(skill)}>Duplicate</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onToggleDisable(skill.id)}>
-                    {enabled ? "Disable" : "Enable"}
-                  </DropdownMenuItem>
+                  {/* TODO: Enable/Disable skill will be implemented later. */}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onClick={() => onDelete(skill)}>
                     Delete

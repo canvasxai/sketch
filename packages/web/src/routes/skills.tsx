@@ -12,9 +12,8 @@ import {
   type Skill,
   type SkillCategory,
   categoryMeta,
+  fromApiSkill,
   getCategoryLabel,
-  getSkillSourcesForUser,
-  isSkillActiveForUser,
   isSkillEnabled,
 } from "@/lib/skills-data";
 import { cn } from "@/lib/utils";
@@ -30,7 +29,7 @@ import { createRoute } from "@tanstack/react-router";
  *
  * Page modes: listing → view | explore-preview → edit | create
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { dashboardRoute } from "./dashboard";
 
@@ -47,7 +46,6 @@ export function SkillsPage() {
   // ── Core state ────────────────────────────────────────────
   const [mode, setMode] = useState<PageMode>("listing");
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
-  const [skills, setSkills] = useState<Skill[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategories, setActiveCategories] = useState<SkillCategory[]>([]);
   const [activeTab, setActiveTab] = useState<"details" | "permissions">("details");
@@ -65,30 +63,24 @@ export function SkillsPage() {
 
   const skillsQuery = useQuery({
     queryKey: ["skills"],
-    queryFn: () => api.skills.list(),
+    queryFn: async () => {
+      const res = await api.skills.list();
+      return {
+        skills: res.skills.map(fromApiSkill),
+      };
+    },
   });
 
-  // Hydrate the local editable state once.
-  useEffect(() => {
-    if (skills.length > 0) return;
-    if (skillsQuery.data?.skills) {
-      setSkills(
-        skillsQuery.data.skills.map((s) => ({
-          id: s.id,
-          name: s.name,
-          description: s.description,
-          body: s.body,
-          category: s.category,
-          status: { org: true, channels: [], individuals: [] },
-          iconBg: categoryMeta[s.category].iconBg,
-          iconEmoji: categoryMeta[s.category].iconEmoji,
-          source: undefined,
-          lastUsedAt: null,
-          createdAt: new Date(),
-        })),
-      );
-    }
-  }, [skills.length, skillsQuery.data]);
+  const skills = skillsQuery.data?.skills ?? [];
+
+  const setSkillsCache = useCallback(
+    (updater: (currentSkills: Skill[]) => Skill[]) => {
+      queryClient.setQueryData<{ skills: Skill[] }>(["skills"], (current) => ({
+        skills: updater(current?.skills ?? []),
+      }));
+    },
+    [queryClient],
+  );
 
   const createSkillMutation = useMutation({
     mutationFn: (draft: SkillDraft) =>
@@ -99,23 +91,13 @@ export function SkillsPage() {
         body: draft.body,
       }),
     onSuccess: async (res) => {
-      await queryClient.invalidateQueries({ queryKey: ["skills"] });
-      const created: Skill = {
-        id: res.skill.id,
-        name: res.skill.name,
-        description: res.skill.description,
-        body: res.skill.body,
-        category: res.skill.category,
-        status: { org: true, channels: [], individuals: [] },
-        iconBg: categoryMeta[res.skill.category].iconBg,
-        iconEmoji: categoryMeta[res.skill.category].iconEmoji,
-        lastUsedAt: null,
-        createdAt: new Date(),
-      };
-      setSkills((prev) => [created, ...prev.filter((s) => s.id !== created.id)]);
+      const created = fromApiSkill(res.skill);
+      setSkillsCache((currentSkills) => [created, ...currentSkills.filter((s) => s.id !== created.id)]);
+      void queryClient.invalidateQueries({ queryKey: ["skills"] });
       setSelectedSkillId(created.id);
       setMode("view");
       setListingTab("active");
+      setViewOrigin("active");
       toast.success("Skill created");
     },
     onError: (err) => {
@@ -132,9 +114,8 @@ export function SkillsPage() {
         body: args.draft.body,
       }),
     onSuccess: async (res) => {
-      await queryClient.invalidateQueries({ queryKey: ["skills"] });
-      setSkills((prev) =>
-        prev.map((s) =>
+      setSkillsCache((currentSkills) =>
+        currentSkills.map((s) =>
           s.id === res.skill.id
             ? {
                 ...s,
@@ -148,6 +129,7 @@ export function SkillsPage() {
             : s,
         ),
       );
+      void queryClient.invalidateQueries({ queryKey: ["skills"] });
       setMode("view");
       setViewOrigin("active");
       toast.success("Skill updated");
@@ -159,12 +141,25 @@ export function SkillsPage() {
 
   const deleteSkillMutation = useMutation({
     mutationFn: (id: string) => api.skills.remove(id),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["skills"] });
+      const previous = queryClient.getQueryData<{ skills: Skill[] }>(["skills"]);
+      queryClient.setQueryData<{ skills: Skill[] }>(["skills"], (current) => ({
+        skills: (current?.skills ?? []).filter((s) => s.id !== id),
+      }));
+      return { previous };
+    },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill deleted");
     },
-    onError: (err) => {
+    onError: (err, _id, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["skills"], context.previous);
+      }
       toast.error(err instanceof Error ? err.message : "Failed to delete skill");
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["skills"] });
     },
   });
 
@@ -259,43 +254,18 @@ export function SkillsPage() {
     }
   }, [mode, viewOrigin]);
 
-  const handleDuplicate = useCallback((skill: Skill) => {
-    const duplicate: Skill = {
-      ...skill,
-      id: `skill-dup-${Date.now()}`,
-      name: `${skill.name} (copy)`,
-      lastUsedAt: null,
-      createdAt: new Date(),
-      source: undefined,
-    };
-    setSkills((prev) => [duplicate, ...prev]);
-    setSelectedSkillId(duplicate.id);
-    setMode("edit");
-    setViewOrigin("active");
-    toast.success("Skill duplicated");
-  }, []);
-
-  const handleToggleDisable = useCallback((skillId: string) => {
-    setSkills((prev) =>
-      prev.map((s) => {
-        if (s.id !== skillId) return s;
-        const currently = isSkillEnabled(s.status);
-        if (currently) {
-          toast.success("Skill disabled");
-          return {
-            ...s,
-            status: {
-              org: false,
-              channels: s.status.channels.map((c) => ({ ...c, enabled: false })),
-              individuals: s.status.individuals.map((i) => ({ ...i, enabled: false })),
-            },
-          };
-        }
-        toast.success("Skill enabled");
-        return { ...s, status: { ...s.status, org: true } };
-      }),
-    );
-  }, []);
+  const handleDuplicate = useCallback(
+    (skill: Skill) => {
+      void createSkillMutation.mutateAsync({
+        name: `${skill.name} (copy)`,
+        description: skill.description,
+        body: skill.body,
+        category: skill.category,
+        status: skill.status,
+      });
+    },
+    [createSkillMutation],
+  );
 
   const handleDeleteClick = useCallback((skill: Skill) => {
     setSkillToDelete(skill);
@@ -305,7 +275,6 @@ export function SkillsPage() {
   const handleDeleteConfirm = useCallback(() => {
     if (!skillToDelete) return;
     const id = skillToDelete.id;
-    setSkills((prev) => prev.filter((s) => s.id !== id));
     deleteSkillMutation.mutate(id);
     setSkillToDelete(null);
     setSelectedSkillId(null);
@@ -356,7 +325,6 @@ export function SkillsPage() {
           onBack={handleBackToListing}
           onEdit={handleEditClick}
           onDuplicate={handleDuplicate}
-          onToggleDisable={handleToggleDisable}
           onDelete={handleDeleteClick}
           isExplorePreview
           onAddSkill={handleAddSkill}
@@ -383,7 +351,6 @@ export function SkillsPage() {
           onBack={handleBackToListing}
           onEdit={handleEditClick}
           onDuplicate={handleDuplicate}
-          onToggleDisable={handleToggleDisable}
           onDelete={handleDeleteClick}
         />
         <DeleteSkillDialog
@@ -502,7 +469,6 @@ export function SkillsPage() {
                   sourceTags={sourceTags}
                   onCardClick={handleCardClick}
                   onDuplicate={handleDuplicate}
-                  onToggleDisable={handleToggleDisable}
                   onDelete={handleDeleteClick}
                 />
               );

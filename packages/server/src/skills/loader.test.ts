@@ -2,7 +2,14 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { inferNameFromBody, loadClaudeSkillsFromDir, loadProjectClaudeSkills, parseFrontMatter } from "./loader";
+import {
+  inferNameFromBody,
+  loadClaudeSkillsFromDir,
+  loadClaudeSkillsFromDirAsync,
+  loadProjectClaudeSkills,
+  loadProjectClaudeSkillsAsync,
+  parseFrontMatter,
+} from "./loader";
 
 describe("parseFrontMatter", () => {
   it("returns empty frontmatter when no frontmatter present", () => {
@@ -68,6 +75,23 @@ describe("parseFrontMatter", () => {
     expect(result.frontMatter.name).toBe("Test Skill");
     expect(result.frontMatter.description).toBe("A test");
   });
+
+  it("parses quoted frontmatter values", () => {
+    const input = '---\nname: "Test Skill"\ndescription: "Line with : colon"\ncategory: "crm"\n---\nBody';
+    const result = parseFrontMatter(input);
+    expect(result.frontMatter).toEqual({
+      name: "Test Skill",
+      description: "Line with : colon",
+      category: "crm",
+    });
+  });
+
+  it("parses escaped characters inside quoted frontmatter values", () => {
+    const input = '---\nname: "Quoted \\"Skill\\""\ndescription: "First line\\nSecond line"\n---\nBody';
+    const result = parseFrontMatter(input);
+    expect(result.frontMatter.name).toBe('Quoted "Skill"');
+    expect(result.frontMatter.description).toBe("First line\nSecond line");
+  });
 });
 
 describe("inferNameFromBody", () => {
@@ -125,6 +149,11 @@ describe("loadProjectClaudeSkills", () => {
 
   it("returns empty array when skills directory doesn't exist", async () => {
     const result = loadProjectClaudeSkills(join(tempDir, "nonexistent"));
+    expect(result).toEqual([]);
+  });
+
+  it("async loader returns empty array when skills directory doesn't exist", async () => {
+    const result = await loadProjectClaudeSkillsAsync(join(tempDir, "nonexistent"));
     expect(result).toEqual([]);
   });
 
@@ -203,6 +232,16 @@ describe("loadProjectClaudeSkills", () => {
     const result = loadProjectClaudeSkills(tempDir);
     expect(result).toHaveLength(3);
     expect(result.map((s) => s.id)).toEqual(["skill1", "skill2", "skill3"]);
+  });
+
+  it("async loader matches sync results", async () => {
+    await writeSkill("skill-a", "---\nname: A\ncategory: ops\n---\nBody A");
+    await writeSkill("skill-b", "# Skill B\n\nBody B");
+
+    const syncResult = loadProjectClaudeSkills(tempDir);
+    const asyncResult = await loadProjectClaudeSkillsAsync(tempDir);
+
+    expect(asyncResult).toEqual(syncResult);
   });
 
   it("defaults invalid category to productivity", async () => {
@@ -308,6 +347,11 @@ describe("loadClaudeSkillsFromDir", () => {
     expect(result).toEqual([]);
   });
 
+  it("async loader returns empty array when directory does not exist", async () => {
+    const result = await loadClaudeSkillsFromDirAsync(join(tempDir, "missing"));
+    expect(result).toEqual([]);
+  });
+
   it("loads skills directly from a skills root directory", async () => {
     await writeSkillAtRoot(
       "root-skill",
@@ -315,6 +359,23 @@ describe("loadClaudeSkillsFromDir", () => {
     );
 
     const result = loadClaudeSkillsFromDir(tempDir);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: "root-skill",
+      name: "Root Skill",
+      description: "From root",
+      category: "ops",
+      body: "Body from root",
+    });
+  });
+
+  it("async loader reads skills directly from a skills root directory", async () => {
+    await writeSkillAtRoot(
+      "root-skill",
+      "---\nname: Root Skill\ndescription: From root\ncategory: ops\n---\nBody from root",
+    );
+
+    const result = await loadClaudeSkillsFromDirAsync(tempDir);
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
       id: "root-skill",

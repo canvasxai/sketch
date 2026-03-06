@@ -1,4 +1,5 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { type Dirent, readFileSync, readdirSync, statSync } from "node:fs";
+import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 export type LoadedSkillCategory =
@@ -62,6 +63,19 @@ function isLoadedCategory(value: string): value is LoadedSkillCategory {
   );
 }
 
+function parseFrontMatterScalar(value: string): string {
+  if (value.startsWith('"') && value.endsWith('"')) {
+    try {
+      const parsed = JSON.parse(value);
+      if (typeof parsed === "string") return parsed;
+    } catch {
+      return value;
+    }
+  }
+
+  return value;
+}
+
 export function parseFrontMatter(md: string): { frontMatter: FrontMatter; body: string } {
   if (!md.startsWith("---")) return { frontMatter: {}, body: md.trim() };
 
@@ -76,7 +90,7 @@ export function parseFrontMatter(md: string): { frontMatter: FrontMatter; body: 
     const idx = line.indexOf(":");
     if (idx === -1) continue;
     const key = line.slice(0, idx).trim();
-    const value = line.slice(idx + 1).trim();
+    const value = parseFrontMatterScalar(line.slice(idx + 1).trim());
     if (!key) continue;
     if (key === "name") fm.name = value;
     if (key === "description") fm.description = value;
@@ -146,6 +160,43 @@ export function loadClaudeSkillsFromDir(dir: string): LoadedSkill[] {
   return out;
 }
 
+export async function loadClaudeSkillsFromDirAsync(dir: string): Promise<LoadedSkill[]> {
+  let entries: Dirent<string>[];
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const skills = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        const mdPath = join(dir, entry.name, "SKILL.MD");
+
+        let md: string;
+        try {
+          md = await readFile(mdPath, "utf-8");
+        } catch {
+          return null;
+        }
+
+        const { frontMatter, body } = parseFrontMatter(md);
+        const inferredName = frontMatter.name ? null : inferNameFromBody(body);
+
+        return {
+          id: entry.name,
+          name: frontMatter.name ?? inferredName ?? entry.name,
+          description: frontMatter.description ?? "",
+          category: frontMatter.category ?? "productivity",
+          body,
+        } satisfies LoadedSkill;
+      }),
+  );
+
+  return skills.filter((skill): skill is LoadedSkill => skill !== null);
+}
+
 /**
  * Loads project skills from `{repoRoot}/.claude/skills/<skill>/SKILL.MD`.
  *
@@ -155,4 +206,9 @@ export function loadClaudeSkillsFromDir(dir: string): LoadedSkill[] {
 export function loadProjectClaudeSkills(repoRoot: string): LoadedSkill[] {
   const dir = join(repoRoot, ".claude", "skills");
   return loadClaudeSkillsFromDir(dir);
+}
+
+export async function loadProjectClaudeSkillsAsync(repoRoot: string): Promise<LoadedSkill[]> {
+  const dir = join(repoRoot, ".claude", "skills");
+  return loadClaudeSkillsFromDirAsync(dir);
 }

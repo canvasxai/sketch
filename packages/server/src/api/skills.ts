@@ -1,22 +1,17 @@
-import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import type { Dirent } from "node:fs";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { type LoadedSkill, loadClaudeSkillsFromDir } from "../skills/loader";
-
-function getRepoRoot(): string {
-  // In dev, server runs with cwd = {repoRoot}/packages/server.
-  // In prod, it also runs from the server package directory.
-  // Going up two levels yields the repo root.
-  return new URL("../../", `file://${process.cwd()}/`).pathname.replace(/\/$/, "");
-}
+import type { Config } from "../config";
+import { type LoadedSkill, loadClaudeSkillsFromDirAsync } from "../skills/loader";
 
 function getOrgSkillsDir(): string {
   return join(homedir(), ".claude", "skills");
 }
 
-function loadOrgSkills(): LoadedSkill[] {
-  return loadClaudeSkillsFromDir(getOrgSkillsDir());
+function loadOrgSkills(): Promise<LoadedSkill[]> {
+  return loadClaudeSkillsFromDirAsync(getOrgSkillsDir());
 }
 
 interface WorkspaceSkill {
@@ -24,34 +19,31 @@ interface WorkspaceSkill {
   skill: LoadedSkill;
 }
 
-function loadWorkspaceSkills(repoRoot: string): WorkspaceSkill[] {
-  const workspaceRoot = join(repoRoot, "data", "workspaces");
+function workspaceRoot(dataDir: string): string {
+  return join(dataDir, "workspaces");
+}
 
-  let entries: string[] = [];
+async function loadWorkspaceSkills(dataDir: string): Promise<WorkspaceSkill[]> {
+  const skillsRoot = workspaceRoot(dataDir);
+
+  let entries: Dirent<string>[];
   try {
-    entries = readdirSync(workspaceRoot);
+    entries = await readdir(skillsRoot, { withFileTypes: true });
   } catch {
     return [];
   }
 
-  const out: WorkspaceSkill[] = [];
+  const skillsByWorkspace = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        const skillsDir = join(skillsRoot, entry.name, ".claude", "skills");
+        const skills = await loadClaudeSkillsFromDirAsync(skillsDir);
+        return skills.map((skill) => ({ workspaceId: entry.name, skill }));
+      }),
+  );
 
-  for (const entry of entries) {
-    const wsDir = join(workspaceRoot, entry);
-    try {
-      if (!statSync(wsDir).isDirectory()) continue;
-    } catch {
-      continue;
-    }
-
-    const skillsDir = join(wsDir, ".claude", "skills");
-    const skills = loadClaudeSkillsFromDir(skillsDir);
-    for (const skill of skills) {
-      out.push({ workspaceId: entry, skill });
-    }
-  }
-
-  return out;
+  return skillsByWorkspace.flat();
 }
 
 function assertSkillId(id: string): string | null {
@@ -76,16 +68,25 @@ function orgSkillMdPath(id: string): string {
   return join(getOrgSkillsDir(), id, "SKILL.MD");
 }
 
-function workspaceSkillMdPath(repoRoot: string, workspaceId: string, id: string): string {
-  return join(repoRoot, "data", "workspaces", workspaceId, ".claude", "skills", id, "SKILL.MD");
+function workspaceSkillDir(dataDir: string, workspaceId: string, id: string): string {
+  return join(workspaceRoot(dataDir), workspaceId, ".claude", "skills", id);
+}
+
+function workspaceSkillMdPath(dataDir: string, workspaceId: string, id: string): string {
+  return join(workspaceSkillDir(dataDir, workspaceId, id), "SKILL.MD");
+}
+
+function renderFrontMatterString(value: string): string {
+  // JSON string escaping is compatible with double-quoted YAML scalars for our simple metadata fields.
+  return JSON.stringify(value);
 }
 
 function renderSkillMd(data: { name: string; description: string; category: string; body: string }): string {
   const fm = [
     "---",
-    `name: ${data.name}`,
-    `description: ${data.description}`,
-    `category: ${data.category}`,
+    `name: ${renderFrontMatterString(data.name)}`,
+    `description: ${renderFrontMatterString(data.description)}`,
+    `category: ${renderFrontMatterString(data.category)}`,
     "---",
     "",
   ].join("\n");
@@ -93,14 +94,12 @@ function renderSkillMd(data: { name: string; description: string; category: stri
   return fm + body + (body.endsWith("\n") || body === "" ? "" : "\n");
 }
 
-export function skillsRoutes() {
+export function skillsRoutes(config: Pick<Config, "DATA_DIR">) {
   const routes = new Hono();
 
-  routes.get("/", (c) => {
-    const repoRoot = getRepoRoot();
-
-    const orgSkills = loadOrgSkills();
-    const workspaceSkills = loadWorkspaceSkills(repoRoot);
+  routes.get("/", async (c) => {
+    const orgSkills = await loadOrgSkills();
+    const workspaceSkills = await loadWorkspaceSkills(config.DATA_DIR);
 
     const byId = new Map<string, LoadedSkill>();
 
@@ -117,13 +116,12 @@ export function skillsRoutes() {
     return c.json({ skills: Array.from(byId.values()) });
   });
 
-  routes.get("/:id", (c) => {
+  routes.get("/:id", async (c) => {
     const id = assertSkillId(c.req.param("id"));
     if (!id) return c.json({ error: { code: "BAD_REQUEST", message: "Invalid skill id" } }, 400);
 
-    const repoRoot = getRepoRoot();
-    const orgSkills = loadOrgSkills();
-    const workspaceSkills = loadWorkspaceSkills(repoRoot);
+    const orgSkills = await loadOrgSkills();
+    const workspaceSkills = await loadWorkspaceSkills(config.DATA_DIR);
 
     const all: LoadedSkill[] = [
       ...orgSkills,
@@ -151,12 +149,11 @@ export function skillsRoutes() {
       return c.json({ error: { code: "BAD_REQUEST", message: "Missing required fields" } }, 400);
     }
 
-    const repoRoot = getRepoRoot();
     const baseId = typeof body.id === "string" && body.id.trim() ? body.id.trim() : slugify(body.name);
     const normalizedBase = assertSkillId(baseId);
     if (!normalizedBase) return c.json({ error: { code: "BAD_REQUEST", message: "Invalid skill id" } }, 400);
 
-    const existingOrg = new Set(loadOrgSkills().map((s) => s.id));
+    const existingOrg = new Set((await loadOrgSkills()).map((s) => s.id));
     let id = normalizedBase;
     let suffix = 2;
     while (existingOrg.has(id)) {
@@ -169,10 +166,10 @@ export function skillsRoutes() {
     const md = renderSkillMd({ name: body.name.trim(), description, category, body: body.body });
 
     const skillDir = join(getOrgSkillsDir(), id);
-    mkdirSync(skillDir, { recursive: true });
-    writeFileSync(orgSkillMdPath(id), md, "utf-8");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(orgSkillMdPath(id), md, "utf-8");
 
-    const skill = loadOrgSkills().find((s) => s.id === id) ?? null;
+    const skill = (await loadOrgSkills()).find((s) => s.id === id) ?? null;
     if (!skill) return c.json({ error: { code: "UNKNOWN", message: "Failed to create skill" } }, 500);
     return c.json({ skill }, 201);
   });
@@ -192,9 +189,8 @@ export function skillsRoutes() {
       return c.json({ error: { code: "BAD_REQUEST", message: "Missing required fields" } }, 400);
     }
 
-    const repoRoot = getRepoRoot();
-    const orgSkills = loadOrgSkills();
-    const workspaceSkills = loadWorkspaceSkills(repoRoot);
+    const orgSkills = await loadOrgSkills();
+    const workspaceSkills = await loadWorkspaceSkills(config.DATA_DIR);
 
     const existingOrg = orgSkills.find((s) => s.id === id);
     const existingWorkspace = workspaceSkills.find(({ skill }) => skill.id === id);
@@ -217,26 +213,25 @@ export function skillsRoutes() {
     const md = renderSkillMd({ name: body.name.trim(), description, category, body: body.body });
 
     if (existingOrg) {
-      writeFileSync(orgSkillMdPath(id), md, "utf-8");
+      await writeFile(orgSkillMdPath(id), md, "utf-8");
     } else if (existingWorkspace) {
-      writeFileSync(workspaceSkillMdPath(repoRoot, existingWorkspace.workspaceId, id), md, "utf-8");
+      await writeFile(workspaceSkillMdPath(config.DATA_DIR, existingWorkspace.workspaceId, id), md, "utf-8");
     }
 
-    const orgAfter = loadOrgSkills();
-    const workspaceAfter = loadWorkspaceSkills(repoRoot);
+    const orgAfter = await loadOrgSkills();
+    const workspaceAfter = await loadWorkspaceSkills(config.DATA_DIR);
     const updated =
       orgAfter.find((s) => s.id === id) ?? workspaceAfter.find(({ skill }) => skill.id === id)?.skill ?? null;
     if (!updated) return c.json({ error: { code: "UNKNOWN", message: "Failed to update skill" } }, 500);
     return c.json({ skill: updated });
   });
 
-  routes.delete("/:id", (c) => {
+  routes.delete("/:id", async (c) => {
     const id = assertSkillId(c.req.param("id"));
     if (!id) return c.json({ error: { code: "BAD_REQUEST", message: "Invalid skill id" } }, 400);
 
-    const repoRoot = getRepoRoot();
-    const orgSkills = loadOrgSkills();
-    const workspaceSkills = loadWorkspaceSkills(repoRoot);
+    const orgSkills = await loadOrgSkills();
+    const workspaceSkills = await loadWorkspaceSkills(config.DATA_DIR);
 
     const existingOrg = orgSkills.find((s) => s.id === id);
     const existingWorkspace = workspaceSkills.find(({ skill }) => skill.id === id);
@@ -247,10 +242,10 @@ export function skillsRoutes() {
 
     if (existingOrg) {
       const skillDir = join(getOrgSkillsDir(), id);
-      rmSync(skillDir, { recursive: true, force: true });
+      await rm(skillDir, { recursive: true, force: true });
     } else if (existingWorkspace) {
-      const skillDir = join(repoRoot, "data", "workspaces", existingWorkspace.workspaceId, ".claude", "skills", id);
-      rmSync(skillDir, { recursive: true, force: true });
+      const skillDir = workspaceSkillDir(config.DATA_DIR, existingWorkspace.workspaceId, id);
+      await rm(skillDir, { recursive: true, force: true });
     }
     return c.json({ success: true });
   });

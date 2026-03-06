@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Skill, SkillSourceTag } from "@/lib/skills-data";
-import { getCategoryLabel, isSkillEnabled } from "@/lib/skills-data";
+import { getCategoryLabel } from "@/lib/skills-data";
 import { cn } from "@/lib/utils";
 import { DotsThreeIcon } from "@phosphor-icons/react";
 import { Download, Star, Store } from "lucide-react";
@@ -18,7 +18,6 @@ interface SkillCardProps {
   sourceTags?: SkillSourceTag[];
   onCardClick: (skillId: string) => void;
   onDuplicate: (skill: Skill) => void;
-  onToggleDisable: (skillId: string) => void;
   onDelete: (skill: Skill) => void;
 }
 
@@ -56,9 +55,7 @@ function SourceTagPills({ tags }: { tags: SkillSourceTag[] }) {
   );
 }
 
-export function SkillCard({ skill, sourceTags, onCardClick, onDuplicate, onToggleDisable, onDelete }: SkillCardProps) {
-  const enabled = isSkillEnabled(skill.status);
-
+export function SkillCard({ skill, sourceTags, onCardClick, onDuplicate, onDelete }: SkillCardProps) {
   return (
     <button
       type="button"
@@ -88,9 +85,7 @@ export function SkillCard({ skill, sourceTags, onCardClick, onDuplicate, onToggl
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
             <DropdownMenuItem onClick={() => onDuplicate(skill)}>Duplicate</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onToggleDisable(skill.id)}>
-              {enabled ? "Disable" : "Enable"}
-            </DropdownMenuItem>
+            {/* TODO: Enable/Disable skill will be implemented later. */}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => onDelete(skill)}>
               Delete
